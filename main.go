@@ -85,13 +85,11 @@ func main() {
 	start := time.Now()
 	if getProcessId() {
 		initialization(true)
-		time_result := time.Since(start)
-		result := fmt.Sprintf("You can remove the flash drive. The program runs in %v", time_result)
-		loggingConsole(result, "DONE", nil)
 	} else {
 		initialization(false)
-		time_result := time.Since(start)
-		result := fmt.Sprintf("You can remove the flash drive. The program runs in %v", time_result)
-		loggingConsole(result, "DONE", nil)
+
 	}
+	time_result := time.Since(start)
+	result := fmt.Sprintf("You can remove the flash drive. The program runs in %v", time_result)
+	loggingConsole(result, "DONE", nil)
 }
