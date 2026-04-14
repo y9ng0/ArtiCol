@@ -11,7 +11,7 @@ import (
 var Log_file int
 var Json_file int
 
-// Инициализация работы от имени администратора (создание рабочего пространства и запуск горутин)
+// Инициализация работы (создание рабочего пространства и запуск горутин)
 func initialization(flag bool) error {
 	loggingConsole("Program started.", "INFO", nil)
 

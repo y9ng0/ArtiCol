@@ -7,6 +7,7 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 )
 
+// Сбор информации о системе
 func systemInfo(str *sysInfo, value string) {
 	info, err := host.Info()
 	str.Title = value

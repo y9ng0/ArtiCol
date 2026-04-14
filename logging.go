@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода
+// Стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода.
 func loggingConsole(text_input, type_input string, err error) {
 	time_now := time.Now().UTC().Format(time.DateTime)
 	var line string
@@ -22,7 +22,7 @@ func loggingConsole(text_input, type_input string, err error) {
 	unix.Write(1, []byte(line))
 }
 
-// Запись в логи с добавлением времени по UTC и префиксом вывода
+// Запись в логи с добавлением времени по UTC и префиксом вывода.
 func loggingFile(text_input, type_input string, err error) {
 	time_now := time.Now().UTC().Format(time.DateTime)
 	var line string
@@ -36,7 +36,7 @@ func loggingFile(text_input, type_input string, err error) {
 	unix.Write(Log_file, []byte(line))
 }
 
-// Запись в логи и стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода
+// Запись в логи и стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода.
 func loggingFilePlusConsole(text_input, type_input string, err error) {
 	time_now := time.Now().UTC().Format(time.DateTime)
 	var line string
@@ -51,6 +51,7 @@ func loggingFilePlusConsole(text_input, type_input string, err error) {
 	unix.Write(Log_file, []byte(line))
 }
 
+// Запись данных в json файл
 func loggingJson(str *sysInfo) {
 	data, err := json.Marshal(str)
 	data = append(data, '\n')
