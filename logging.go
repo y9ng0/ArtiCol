@@ -8,22 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода.
-func loggingConsole(text_input, type_input string, err error) {
-	time_now := time.Now().UTC().Format(time.DateTime)
-	var line string
-	if err == nil {
-		line = fmt.Sprintf("%s [%s] %s\n", time_now,
-			type_input, text_input)
-	} else {
-		line = fmt.Sprintf("%s [%s] %s %v\n", time_now,
-			type_input, text_input, err)
-	}
-	unix.Write(1, []byte(line))
-}
-
 // Запись в логи с добавлением времени по UTC и префиксом вывода.
-func loggingFile(text_input, type_input string, err error) {
+func loggingFile(c *Collector, text_input, type_input string, err error) {
 	time_now := time.Now().UTC().Format(time.DateTime)
 	var line string
 	if err == nil {
@@ -33,11 +19,11 @@ func loggingFile(text_input, type_input string, err error) {
 		line = fmt.Sprintf("%s [%s] %s %v\n", time_now,
 			type_input, text_input, err)
 	}
-	unix.Write(Log_file, []byte(line))
+	unix.Write(c.LogFile, []byte(line))
 }
 
 // Запись в логи и стандартный вывод в консоль с добавлением времени по UTC и префиксом вывода.
-func loggingFilePlusConsole(text_input, type_input string, err error) {
+func loggingFilePlusConsole(c *Collector, text_input, type_input string, err error) {
 	time_now := time.Now().UTC().Format(time.DateTime)
 	var line string
 	if err == nil {
@@ -48,23 +34,34 @@ func loggingFilePlusConsole(text_input, type_input string, err error) {
 			type_input, text_input, err)
 	}
 	unix.Write(1, []byte(line))
-	unix.Write(Log_file, []byte(line))
+	unix.Write(c.LogFile, []byte(line))
 }
 
 // Запись данных в json файл
-func loggingJson(str *sysInfo) {
-	data, err := json.Marshal(str)
+// strct - слайс структур
+func loggingJson(c *Collector, strct any, title string, flag bool, file int) {
+	data, err := json.Marshal(strct)
 	data = append(data, '\n')
 	if err != nil {
-		text_input := fmt.Sprintf("Problem with %s", str.Title)
-		loggingFilePlusConsole(text_input, "WARNING", err)
+		text_input := fmt.Sprintf("Problem adding to JSON. %s", title)
+		loggingFilePlusConsole(c, text_input, "WARNING", err)
 	}
-	_, err = unix.Write(Json_file, data)
-	if err == nil {
-		text_input := fmt.Sprintf("%s added to json", str.Title)
-		loggingFilePlusConsole(text_input, "OK", err)
+	_, err = unix.Write(file, data)
+	if flag {
+		if err == nil {
+			text_input := fmt.Sprintf("%s added to JSON.", title)
+			loggingFilePlusConsole(c, text_input, "INFO", err)
+		} else {
+			text_input := fmt.Sprintf("%s not added to JSON.", title)
+			loggingFilePlusConsole(c, text_input, "WARNING", err)
+		}
 	} else {
-		text_input := fmt.Sprintf("%s not added to json", str.Title)
-		loggingFilePlusConsole(text_input, "WARNING", err)
+		if err == nil {
+			text_input := fmt.Sprintf("%s added to JSON.", title)
+			loggingFile(c, text_input, "INFO", err)
+		} else {
+			text_input := fmt.Sprintf("%s not added to JSON.", title)
+			loggingFile(c, text_input, "WARNING", err)
+		}
 	}
 }
