@@ -134,6 +134,7 @@ func getHomeDir(c *Collector, infoSys *Info, flag bool) {
 					continue
 				} else {
 					loggingFile(c, fmt.Sprintf("Processing user \"%s\" with home directory \"%v\".", name, string(home_dir)), "INFO", nil)
+					fmt.Println(c, name, home_dir)
 					getHistory(c, name, home_dir)
 				}
 			}
@@ -168,7 +169,7 @@ func getHistory(c *Collector, name, home_dir []byte) {
 		return
 	}
 	loggingFile(c, fmt.Sprintf("Directory \"%v\" created for user \"%s\".", user_dir, name), "INFO", nil)
-	destination := fmt.Sprintf("\"%v/users/%s/bash_history\"", c.MainDirectory, name)
+	destination := fmt.Sprintf("%v/users/%s/bash_history", c.MainDirectory, name)
 	source := string(home_dir) + "/.bash_history"
 	loggingFile(c, fmt.Sprintf("Copying \"%v\" to \"%v\".", source, destination), "INFO", nil)
 	err = CopyFile(c, source, destination)
@@ -208,7 +209,6 @@ func getSessions(c *Collector, infoSys *Info) {
 	}
 	loggingFile(c, "Successfully copied \"/var/run/systemd/sessions\" directory.", "INFO", nil)
 
-	loggingFilePlusConsole(c, fmt.Sprintf("Systemd sessions added to \"%v\".", sessions_directory), "INFO", nil)
 	loggingFilePlusConsole(c, "\"Systemd sessions\" added to JSON.", "INFO", nil)
 	infoSys.Value = "./users/sessions/"
 }
