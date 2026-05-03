@@ -1,5 +1,10 @@
 package main
 
+// mainArtifacts - последовательный вызов функций сбора артефактов
+// c - коллектор
+// json_info - срез для сохранения информации об артефактах
+// flag - флаг запуска (true - root, false - user)
+// Возвращает обновленный срез json_info
 func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Информация о системе

@@ -10,7 +10,7 @@ import (
 // c - коллектор
 // infoSys - информация об объекте
 func systemInfo(c *Collector, infoSys *Info) {
-	loggingFilePlusConsole(c, "Starting to retrieve system information...", "INFO", nil)
+	loggingFilePlusConsole(c, "Starting to retrieve \"system information\".", "INFO", nil)
 
 	// Типы информации для сбора
 	var arrive = []string{"Kernel", "Hostname", "Uptime", "OS"}
@@ -34,7 +34,7 @@ func systemInfo(c *Collector, infoSys *Info) {
 	infoSys.Title = "system information"
 	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	infoSys.Time = getTimeUtc()
-	loggingFilePlusConsole(c, "Finished retrieving system information.", "INFO", nil)
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"system information\" to \"%v\".", infoSys.Value), "INFO", nil)
 }
 
 // getInfo - получение информации о системе
@@ -42,11 +42,11 @@ func systemInfo(c *Collector, infoSys *Info) {
 // strct - структура для заполнения
 // typeInfo - тип информации
 func getInfo(c *Collector, strct *sysInfo, typeInfo string) {
-	loggingFile(c, fmt.Sprintf("Retrieving system information about \"%v\".", typeInfo), "INFO", nil)
+	loggingFile(c, fmt.Sprintf("Starting to retrieve \"%v\".", typeInfo), "INFO", nil)
 	info, err := host.Info()
 	strct.NameInfo = typeInfo
 	if err != nil {
-		loggingFile(c, fmt.Sprintf("Error retrieving system information about \"%v\".", typeInfo), "WARNING", err)
+		loggingFile(c, fmt.Sprintf("Failed to retrieve \"%v\".", typeInfo), "WARNING", err)
 		strct.Value = fmt.Sprintf("Error: %v", err)
 	} else {
 		switch typeInfo {
@@ -59,6 +59,6 @@ func getInfo(c *Collector, strct *sysInfo, typeInfo string) {
 		case "OS":
 			strct.Value = fmt.Sprintf("%v (%v)", info.PlatformFamily, info.PlatformVersion)
 		}
-		loggingFile(c, fmt.Sprintf("System information about \"%v\" was successfully retrieved.", typeInfo), "INFO", nil)
+		loggingFile(c, fmt.Sprintf("Finished retrieving \"%v\".", typeInfo), "INFO", nil)
 	}
 }

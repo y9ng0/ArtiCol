@@ -9,33 +9,42 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// processWorker - воркер для параллельного сбора информации о процессах
+// c - коллектор
+// pids - срез идентификаторов процессов
+// flag - флаг запуска (true - root, false - user)
+// wg - группа ожидания
+// resultsChan - канал для результатов
 func processWorker(c *Collector, pids []int32, flag bool, wg *sync.WaitGroup, resultsChan chan<- []processesId) {
 	defer wg.Done()
 	result := getInfoPid(c, pids, flag)
 	resultsChan <- result
 }
 
+// getPids - сбор информации о процессах
+// c - коллектор
+// info - информация об объекте
+// flag - флаг запуска (true - root, false - user)
 func getPids(c *Collector, info *Info, flag bool) error {
-	loggingFilePlusConsole(c, "Starting to retrieve processes (parallel)...", "INFO", nil)
-	loggingFile(c, "Starting to retrieve processes from /proc.", "INFO", nil)
+	loggingFilePlusConsole(c, "Starting to retrieve \"processes\".", "INFO", nil)
 
 	filename := "processes"
 	processes_json, err := jsonCreate(c, filename)
 	if err != nil {
-		loggingFilePlusConsole(c, "JSON for processes not created.", "ERROR", nil)
+		loggingFilePlusConsole(c, "Failed to create JSON file \"processes\".", "ERROR", nil)
 		return err
 	}
 	defer unix.Close(processes_json)
 
-	loggingFile(c, "Retrieving process IDs.", "INFO", nil)
+	loggingFile(c, "Starting to retrieve process IDs.", "INFO", nil)
 	pids, err := process.Pids()
 	if err != nil {
-		loggingFilePlusConsole(c, "Unable to retrieve processes.", "ERROR", err)
+		loggingFilePlusConsole(c, "Failed to retrieve \"processes\".", "ERROR", err)
 		return err
 	}
 
 	length := len(pids)
-	loggingFile(c, fmt.Sprintf("Found %d processes in /proc.", length), "INFO", nil)
+	loggingFile(c, fmt.Sprintf("Found %d processes.", length), "INFO", nil)
 
 	if length == 0 {
 		loggingFile(c, "No processes found.", "WARNING", nil)
@@ -76,18 +85,22 @@ func getPids(c *Collector, info *Info, flag bool) error {
 		allProcesses = append(allProcesses, part...)
 	}
 
-	loggingFile(c, fmt.Sprintf("Total processes collected: %d", len(allProcesses)), "INFO", nil)
+	loggingFile(c, fmt.Sprintf("Found %d processes.", len(allProcesses)), "INFO", nil)
 
 	info.Title = filename
 	info.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	info.Time = getTimeUtc()
 
-	loggingFile(c, "Writing \"processes\" to JSON.", "INFO", nil)
 	loggingJson(c, allProcesses, "Processes", true, processes_json)
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"processes\" to \"%v\".", info.Value), "INFO", nil)
 
 	return nil
 }
 
+// getInfoPid - сбор детальной информации о конкретных процессах
+// c - коллектор
+// pids - срез идентификаторов процессов
+// flag - флаг запуска (true - root, false - user)
 func getInfoPid(c *Collector, pids []int32, flag bool) []processesId {
 	var partAllProcesses []processesId
 	for _, pid := range pids {
@@ -154,7 +167,7 @@ func getInfoPid(c *Collector, pids []int32, flag bool) []processesId {
 				}
 			}
 		} else {
-			loggingFile(c, fmt.Sprintf("Unable to retrieve process [pid=\"%v\"]: %v", pid, err), "ERROR", err)
+			loggingFile(c, fmt.Sprintf("Failed to retrieve process \"%v\".", pid), "WARNING", err)
 		}
 		partAllProcesses = append(partAllProcesses, strct)
 	}

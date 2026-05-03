@@ -9,17 +9,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Получение текущего времени в формате UTC
+// getTimeUtc - получение текущего времени в формате UTC
+// Возвращает строку со временем
 func getTimeUtc() string {
 	return string(time.Now().UTC().Format(time.DateTime))
 }
 
 // initialization - инициализация работы (создание рабочего пространства и запуск горутин)
-// c - коллекция данных
+// c - коллектор
 // flag - флаг запуска (true - root, false - user)
 // start - время начала сбора
+// Возвращает ошибку или nil
 func initialization(c *Collector, flag bool, start time.Time) error {
-	loggingConsole("Program started.", "INFO", nil)
+	loggingConsole("Starting to retrieve artifacts.", "INFO", nil)
 	c.UserName = getUserProcessName()
 
 	// Создание рабочей директории с названием хоста и указанием времени начала сбора
@@ -33,9 +35,9 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 		err = makeDirectory(c.MainDirectory)
 	}
 	if err == nil {
-		loggingConsole("Directory created.", "INFO", nil)
+		loggingConsole("Finished creating directory \"workspace\".", "INFO", nil)
 	} else {
-		loggingConsole("Directory not created.", "FATAL", err)
+		loggingConsole("Failed to create directory \"workspace\".", "FATAL", err)
 		return err
 	}
 
@@ -64,13 +66,14 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 	// Завершение процесса сбора информации и запись данных в json
 	loggingJson(c, &json_info, "INFO", true, c.JsonFile)
 
-	time_result := time.Since(start)
-	result := fmt.Sprintf("You can remove the flash drive or the report. The program runs in %v", time_result)
+	elapsed := time.Since(start)
+	result := fmt.Sprintf("Finished retrieving artifacts. The program ran in %v.", elapsed)
 	loggingFilePlusConsole(c, result, "DONE", nil)
 	return nil
 }
 
 // getProcessId - проверка наличия root-прав процесса
+// Возвращает true если есть root-права, иначе false
 func getProcessId() bool {
 	user_id := unix.Getuid()
 	if user_id == 0 {
@@ -81,6 +84,7 @@ func getProcessId() bool {
 }
 
 // getUserProcessName - получение имени пользователя процесса
+// Возвращает строку с именем пользователя
 func getUserProcessName() string {
 	user_id := fmt.Sprintf("%v", unix.Geteuid())
 	var name string

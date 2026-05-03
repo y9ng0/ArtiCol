@@ -6,12 +6,15 @@ import (
 	"github.com/shirou/gopsutil/v4/net"
 )
 
+// getAllConnections - сбор информации о сетевых соединениях
+// c - коллектор
+// json_info - срез для сохранения информации об артефакте
+// Возвращает обновленный срез json_info
 func getAllConnections(c *Collector, json_info []Info) []Info {
 	loggingFilePlusConsole(c, "Starting to retrieve TCP/UDP connections...", "INFO", nil)
 	filename := "active_networks"
 	networks_json, _ := jsonCreate(c, filename)
 	network := []networks{} // наполнитель для json файла
-	loggingFile(c, "Retrieving \"network\" connections.", "INFO", nil)
 	connections, err := net.Connections("inet")
 
 	if err != nil {
@@ -55,12 +58,12 @@ func getAllConnections(c *Collector, json_info []Info) []Info {
 			network = append(network, info)
 		}
 	}
-	loggingFile(c, "Writing \"network\" connections to JSON.", "INFO", nil)
 	loggingJson(c, network, "Networks", true, networks_json)
 	infoSys := Info{}
 	infoSys.Title = "networks"
 	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	infoSys.Time = getTimeUtc()
 	json_info = append(json_info, infoSys)
+	loggingFilePlusConsole(c, "Finished retrieving TCP/UDP connections.", "INFO", nil)
 	return json_info
 }

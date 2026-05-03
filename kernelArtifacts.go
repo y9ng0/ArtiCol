@@ -7,9 +7,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Сбор информации о загруженных модулях ядра
+// getKernelModules - сбор информации о загруженных модулях ядра
+// c - коллектор
+// infoSys - информация об объекте
 func getKernelModules(c *Collector, infoSys *Info) {
-	loggingFilePlusConsole(c, "Starting to retrieve kernel modules...", "INFO", nil)
+	loggingFilePlusConsole(c, "Starting to retrieve \"kernel modules\".", "INFO", nil)
 	infoSys.Title = "kernel modules"
 	infoSys.Time = getTimeUtc()
 	filename := "kernel_modules"
@@ -17,15 +19,13 @@ func getKernelModules(c *Collector, infoSys *Info) {
 	defer unix.Close(kernel_json)
 
 	// Чтение файла /proc/modules
-	loggingFile(c, "Opening \"/proc/modules\".", "INFO", nil)
 	fd, err := unix.Open("/proc/modules", unix.O_RDONLY, 0)
-	defer unix.Close(fd)
 	if err != nil {
-		loggingFilePlusConsole(c, "Unable to open \"/proc/modules\".", "ERROR", err)
+		loggingFilePlusConsole(c, "Failed to open file \"/proc/modules\".", "ERROR", err)
 		infoSys.Value = fmt.Sprintf("Error: %v", err)
 		return
 	}
-	loggingFile(c, "Reading \"/proc/modules\".", "INFO", nil)
+	defer unix.Close(fd)
 
 	buf := make([]byte, 4096)
 	var finalData []byte
@@ -36,7 +36,6 @@ func getKernelModules(c *Collector, infoSys *Info) {
 		}
 		finalData = append(finalData, buf[:n]...)
 	}
-	loggingFile(c, "Parsing \"/proc/modules\" data.", "INFO", nil)
 
 	// Парсинг данных
 	lines := bytes.Split(finalData, []byte("\n"))
@@ -67,7 +66,7 @@ func getKernelModules(c *Collector, infoSys *Info) {
 		}
 	}
 
-	loggingFile(c, "Writing \"kernel_modules\" to JSON.", "INFO", nil)
 	loggingJson(c, modules, "Kernel modules", true, kernel_json)
 	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"kernel modules\" to \"%v\".", infoSys.Value), "INFO", nil)
 }
