@@ -9,38 +9,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func jsonCreate(c *Collector, filename string) (int, error) {
-	filename = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
-	file, err := unix.Open(filename, unix.O_CREAT|unix.O_WRONLY|unix.O_APPEND, 0777)
-	if err == nil {
-		loggingFilePlusConsole(c, fmt.Sprintf("File to path \"%v\" created.", filename), "INFO", nil)
-		return file, nil
-	} else {
-		loggingFilePlusConsole(c, fmt.Sprintf("File to path \"%v\" not created.", filename), "ERROR", err)
-		return 100000, err
-	}
-}
-
+// Получение текущего времени в формате UTC
 func getTimeUtc() string {
 	return string(time.Now().UTC().Format(time.DateTime))
 }
 
-func makeDirectory(path string) error {
-	return unix.Mkdir(path, 0777)
-}
-
-func loggingConsole(text_input, type_input string, err error) {
-	time_now := time.Now().UTC().Format(time.DateTime)
-	var line string
-	if err == nil {
-		line = fmt.Sprintf("%s [%s] %s\n", time_now, type_input, text_input)
-	} else {
-		line = fmt.Sprintf("%s [%s] %s %v\n", time_now, type_input, text_input, err)
-	}
-	unix.Write(1, []byte(line))
-}
-
-// Инициализация работы (создание рабочего пространства и запуск горутин)
+// initialization - инициализация работы (создание рабочего пространства и запуск горутин)
+// c - коллекция данных
+// flag - флаг запуска (true - root, false - user)
+// start - время начала сбора
 func initialization(c *Collector, flag bool, start time.Time) error {
 	loggingConsole("Program started.", "INFO", nil)
 	c.UserName = getUserProcessName()
@@ -93,7 +70,7 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 	return nil
 }
 
-// Проверка наличия root-прав процесса
+// getProcessId - проверка наличия root-прав процесса
 func getProcessId() bool {
 	user_id := unix.Getuid()
 	if user_id == 0 {
@@ -103,6 +80,7 @@ func getProcessId() bool {
 	}
 }
 
+// getUserProcessName - получение имени пользователя процесса
 func getUserProcessName() string {
 	user_id := fmt.Sprintf("%v", unix.Geteuid())
 	var name string
@@ -139,7 +117,7 @@ func getUserProcessName() string {
 	return name
 }
 
-// Вход в программу
+// main - вход в программу
 func main() {
 	start := time.Now()
 	c := &Collector{}

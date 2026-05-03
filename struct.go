@@ -1,17 +1,21 @@
 package main
 
+import "sync"
+
+// Info - информация об объекте
 type Info struct {
-	Title any `json:"title"`          // Говорящее название
-	Value any `json:"value"`          // Тут может быть какое-то значение или путь к файлу
-	Time  any `json:"utc_time"`       // Время сбора информации по UTC
-	Hash  any `json:"hash,omitempty"` // Вычисленный хэш (если не нужно будет, то можно и удалить)
+	Title any `json:"title"`    // Говорящее название
+	Value any `json:"value"`    // Тут может быть какое-то значение или путь к файлу
+	Time  any `json:"utc_time"` // Время сбора информации по UTC
 }
 
+// sysInfo - информация о системе
 type sysInfo struct {
 	NameInfo any `json:"title"`
 	Value    any `json:"value"`
 }
 
+// processesId - информация о процессах
 type processesId struct {
 	Pid            any `json:"pid"`
 	Uids           any `json:"uids"`
@@ -24,6 +28,7 @@ type processesId struct {
 	FileDescriptor any `json:"fd,omitempty"`
 }
 
+// networks - информация о сетевых соединениях
 type networks struct {
 	Pid          any `json:"pid"`
 	RemoteAddr   any `json:"remoteaddr"`
@@ -32,6 +37,7 @@ type networks struct {
 	Status       any `json:"status"`
 }
 
+// kernelModule - информация о модулях ядра
 type kernelModule struct {
 	Name   any `json:"name"`
 	Size   any `json:"size"`
@@ -39,9 +45,18 @@ type kernelModule struct {
 	RefCnt any `json:"refcnt"`
 }
 
+// Collector - коллектор
 type Collector struct {
 	LogFile       int
 	JsonFile      int
 	MainDirectory string
 	UserName      string
+	LogMutex      sync.Mutex
+}
+
+// fileCopyTask - структура для задачи копирования файла
+type fileCopyTask struct {
+	srcPath string
+	dstPath string
+	name    string
 }

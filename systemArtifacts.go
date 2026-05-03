@@ -6,40 +6,48 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 )
 
-// Сбор информации о системе
-// strct - Ссылка на экземпляр sysInfo структуры
-// typeInfo - какую информацию необходимо добавить в структуру
+// systemInfo - сбор информации о системе
+// c - коллектор
+// infoSys - информация об объекте
 func systemInfo(c *Collector, infoSys *Info) {
-	loggingFilePlusConsole(c, "Starting to retrieve system info...", "INFO", nil)
+	loggingFilePlusConsole(c, "Starting to retrieve system information...", "INFO", nil)
+
+	// Типы информации для сбора
 	var arrive = []string{"Kernel", "Hostname", "Uptime", "OS"}
+
+	// Создание JSON файла
 	filename := "system_info"
-	loggingFile(c, fmt.Sprintf("Creating JSON file \"%v\".", filename), "INFO", nil)
-	system_json, err := jsonCreate(c, filename)
-	if err != nil {
-		loggingFilePlusConsole(c, "System info JSON not created.", "ERROR", err)
-		return
-	}
-	loggingFile(c, fmt.Sprintf("JSON file \"%v\" created.", filename), "INFO", nil)
-	sys_json := []sysInfo{} // наполнитель system_json
+	system_json, _ := jsonCreate(c, filename)
+
+	// Наполнитель для JSON файла
+	sys_json := []sysInfo{}
+
+	// Заполнение JSON файла
 	for _, value := range arrive {
-		loggingFile(c, fmt.Sprintf("Retrieving \"%s\" info.", value), "INFO", nil)
 		typeInfo := sysInfo{}
-		// Добавить горутины
-		getInfo(&typeInfo, value)
+		getInfo(c, &typeInfo, value)
 		sys_json = append(sys_json, typeInfo)
 	}
-	loggingFile(c, "Writing \"system_info\" to JSON.", "INFO", nil)
-	loggingJson(c, sys_json, "System info", true, system_json)
-	infoSys.Title = "system info"
-	infoSys.Value = fmt.Sprintf("./%v.json", filename)
+
+	// Запись в JSON файл
+	loggingJson(c, sys_json, "system", true, system_json)
+	infoSys.Title = "system information"
+	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	infoSys.Time = getTimeUtc()
+	loggingFilePlusConsole(c, "Finished retrieving system information.", "INFO", nil)
 }
 
-func getInfo(strct *sysInfo, typeInfo string) {
+// getInfo - получение информации о системе
+// c - коллектор
+// strct - структура для заполнения
+// typeInfo - тип информации
+func getInfo(c *Collector, strct *sysInfo, typeInfo string) {
+	loggingFile(c, fmt.Sprintf("Retrieving system information about \"%v\".", typeInfo), "INFO", nil)
 	info, err := host.Info()
 	strct.NameInfo = typeInfo
 	if err != nil {
-		strct.Value = err
+		loggingFile(c, fmt.Sprintf("Error retrieving system information about \"%v\".", typeInfo), "WARNING", err)
+		strct.Value = fmt.Sprintf("Error: %v", err)
 	} else {
 		switch typeInfo {
 		case "Uptime":
@@ -51,5 +59,6 @@ func getInfo(strct *sysInfo, typeInfo string) {
 		case "OS":
 			strct.Value = fmt.Sprintf("%v (%v)", info.PlatformFamily, info.PlatformVersion)
 		}
+		loggingFile(c, fmt.Sprintf("System information about \"%v\" was successfully retrieved.", typeInfo), "INFO", nil)
 	}
 }

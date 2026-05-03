@@ -13,15 +13,8 @@ func getKernelModules(c *Collector, infoSys *Info) {
 	infoSys.Title = "kernel modules"
 	infoSys.Time = getTimeUtc()
 	filename := "kernel_modules"
-	loggingFile(c, fmt.Sprintf("Creating JSON file \"%v\".", filename), "INFO", nil)
-	kernel_json, err := jsonCreate(c, filename)
-	if err != nil {
-		loggingFilePlusConsole(c, "Kernel modules JSON not created.", "ERROR", err)
-		infoSys.Value = fmt.Sprintf("Error: %v", err)
-		return
-	}
+	kernel_json, _ := jsonCreate(c, filename)
 	defer unix.Close(kernel_json)
-	loggingFile(c, fmt.Sprintf("JSON file \"%v\" created.", filename), "INFO", nil)
 
 	// Чтение файла /proc/modules
 	loggingFile(c, "Opening \"/proc/modules\".", "INFO", nil)
@@ -76,5 +69,5 @@ func getKernelModules(c *Collector, infoSys *Info) {
 
 	loggingFile(c, "Writing \"kernel_modules\" to JSON.", "INFO", nil)
 	loggingJson(c, modules, "Kernel modules", true, kernel_json)
-	infoSys.Value = fmt.Sprintf("./%v.json", filename)
+	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 }

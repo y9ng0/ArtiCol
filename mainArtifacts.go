@@ -12,11 +12,6 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 	getKernelModules(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
-	// Сбор системных логов
-	infoSys = Info{}
-	getSystemLogs(c, &infoSys)
-	json_info = append(json_info, infoSys)
-
 	// Информация о процессах
 	infoSys = Info{}
 	getPids(c, &infoSys, flag)
@@ -43,6 +38,11 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 	// Копирование systemd sessions
 	infoSys = Info{}
 	getSessions(c, &infoSys)
+	json_info = append(json_info, infoSys)
+
+	// Сбор системных логов
+	infoSys = Info{}
+	getSystemLogs(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	return json_info

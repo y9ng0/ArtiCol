@@ -8,15 +8,8 @@ import (
 
 func getAllConnections(c *Collector, json_info []Info) []Info {
 	loggingFilePlusConsole(c, "Starting to retrieve TCP/UDP connections...", "INFO", nil)
-	loggingFile(c, "Starting to retrieve \"TCP/UDP\" connections.", "INFO", nil)
 	filename := "active_networks"
-	loggingFile(c, fmt.Sprintf("Creating JSON file \"%v\".", filename), "INFO", nil)
-	networks_json, err := jsonCreate(c, filename)
-	if err != nil {
-		loggingFilePlusConsole(c, "Networks JSON not created.", "ERROR", err)
-		return json_info
-	}
-	loggingFile(c, fmt.Sprintf("JSON file \"%v\" created.", filename), "INFO", nil)
+	networks_json, _ := jsonCreate(c, filename)
 	network := []networks{} // наполнитель для json файла
 	loggingFile(c, "Retrieving \"network\" connections.", "INFO", nil)
 	connections, err := net.Connections("inet")
@@ -66,7 +59,7 @@ func getAllConnections(c *Collector, json_info []Info) []Info {
 	loggingJson(c, network, "Networks", true, networks_json)
 	infoSys := Info{}
 	infoSys.Title = "networks"
-	infoSys.Value = fmt.Sprintf("./%v.json", filename)
+	infoSys.Value = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	infoSys.Time = getTimeUtc()
 	json_info = append(json_info, infoSys)
 	return json_info
