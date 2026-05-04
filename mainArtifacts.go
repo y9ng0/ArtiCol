@@ -1,10 +1,5 @@
 package main
 
-// mainArtifacts - последовательный вызов функций сбора артефактов
-// c - коллектор
-// json_info - срез для сохранения информации об артефактах
-// flag - флаг запуска (true - root, false - user)
-// Возвращает обновленный срез json_info
 func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Информация о системе
@@ -50,5 +45,17 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 	getSystemLogs(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
+	// Генерация HTML отчета
+	err := generateHTMLReport(c, json_info)
+	if err != nil {
+		loggingFilePlusConsole(c, "Failed to generate HTML report", "WARNING", err)
+	} else {
+		infoHtml := Info{
+			Title: "HTML Report",
+			Value: c.MainDirectory + "/report.html",
+			Time:  getTimeUtc(),
+		}
+		json_info = append(json_info, infoHtml)
+	}
 	return json_info
 }
