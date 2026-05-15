@@ -1,3 +1,4 @@
+// mainArtifacts.go - обновленная версия
 package main
 
 func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
@@ -22,7 +23,7 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Копирование файла passwd
 	infoSys = Info{}
-	getPasswd(c, &infoSys)
+	getPasswd(c, &infoSys) // Копирует на флешку
 	json_info = append(json_info, infoSys)
 
 	// Копирование файла shadow
@@ -46,16 +47,10 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 	json_info = append(json_info, infoSys)
 
 	// Генерация HTML отчета
-	err := generateHTMLReport(c, json_info)
-	if err != nil {
-		loggingFilePlusConsole(c, "Failed to generate HTML report", "WARNING", err)
-	} else {
-		infoHtml := Info{
-			Title: "HTML Report",
-			Value: c.MainDirectory + "/report.html",
-			Time:  getTimeUtc(),
-		}
-		json_info = append(json_info, infoHtml)
-	}
+	json_info = createHtmlReport(c, json_info)
+
 	return json_info
 }
+
+
+

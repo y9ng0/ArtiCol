@@ -56,11 +56,11 @@ func getKernelModules(c *Collector, infoSys *Info) {
 			module := kernelModule{}
 			module.Name = string(parts[0])
 			module.Size = string(parts[1])
-			module.UsedBy = string(parts[2])
+			module.RefCnt = string(parts[2])
 			if len(parts) >= 4 {
-				module.RefCnt = string(parts[3])
+				module.UsedBy = string(parts[3])
 			} else {
-				module.RefCnt = "0"
+				module.UsedBy = "-"
 			}
 			modules = append(modules, module)
 		}

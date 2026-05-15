@@ -1,3 +1,5 @@
 .vscode/
 20*
 ArtiCol
+artifacts*
+decrypt

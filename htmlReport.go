@@ -28,6 +28,7 @@ type HTMLReport struct {
 	Anomalies []Anomaly
 	Timeline  []TimelineEvent
 }
+
 // processes whitelist (to prevent inclusion in report)
 var systemProcessesWhitelist = map[string]bool{
 	"kworker": true, "systemd": true, "sshd": true, "cron": true, "bash": true,
@@ -35,6 +36,7 @@ var systemProcessesWhitelist = map[string]bool{
 	"init": true, "kthreadd": true, "rcu_gp": true, "ksoftirqd": true,
 	"migration": true, "watchdog": true, "kswapd0": true, "kdevtmpfs": true,
 }
+
 // same stuff but for IPs
 var trustedExternalNetworks = []struct {
 	start string
@@ -52,6 +54,21 @@ var trustedExternalNetworks = []struct {
 	{"20.0.0.0", "20.255.255.255"}, {"40.0.0.0", "40.255.255.255"},
 }
 
+func createHtmlReport(c *Collector, json_info []Info) []Info {
+	err := generateHTMLReport(c, json_info)
+	if err != nil {
+		loggingFilePlusConsole(c, "Failed to generate HTML report", "WARNING", err)
+	} else {
+		infoHtml := Info{
+			Title: "HTML Report",
+			Value: c.MainDirectory + "/report.html",
+			Time:  getTimeUtc(),
+		}
+		json_info = append(json_info, infoHtml)
+	}
+	return json_info
+}
+
 func isIPInTrustedRange(ip string) bool {
 	if ip == "" {
 		return false
@@ -60,7 +77,7 @@ func isIPInTrustedRange(ip string) bool {
 	if len(parts) != 4 {
 		return false
 	}
-// conversion into 32bit
+	// conversion into 32bit
 	var ipNum uint32
 	for i := 0; i < 4; i++ {
 		num, _ := strconv.Atoi(parts[i])
@@ -85,6 +102,7 @@ func isIPInTrustedRange(ip string) bool {
 	}
 	return false
 }
+
 // checks if IP is from class A-C private networks
 func isPrivateIP(ip string) bool {
 	if ip == "" || ip == "0.0.0.0" || ip == "::" {
@@ -107,6 +125,7 @@ func isPrivateIP(ip string) bool {
 	}
 	return false
 }
+
 // input: slice of processes from processes.json, return: slice of anomalies
 // suspicious names - take a wild guess
 func analyzeProcesses(processes []processesId) []Anomaly {
@@ -153,6 +172,7 @@ func analyzeProcesses(processes []processesId) []Anomaly {
 	}
 	return anomalies
 }
+
 // input: slice of connections from active_networks.json, return: anomalies slice, seen - deduplication map
 func analyzeNetwork(connections []networks) []Anomaly {
 	var anomalies []Anomaly
@@ -163,7 +183,7 @@ func analyzeNetwork(connections []networks) []Anomaly {
 		status := fmt.Sprintf("%v", conn.Status)
 		connType := fmt.Sprintf("%v", conn.Type)
 		pid := fmt.Sprintf("%v", conn.Pid)
-// looks only for ESTABLISHED connections
+		// looks only for ESTABLISHED connections
 		if status == "TIME_WAIT" || status == "CLOSE_WAIT" {
 			continue
 		}
@@ -180,13 +200,13 @@ func analyzeNetwork(connections []networks) []Anomaly {
 		if isIPInTrustedRange(ip) {
 			continue
 		}
-// generates key from addr, status and pid, if it exists - skips
+		// generates key from addr, status and pid, if it exists - skips
 		key := fmt.Sprintf("%s_%s_%s", remoteAddr, status, pid)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-// adds anomaly
+		// adds anomaly
 		anomalies = append(anomalies, Anomaly{
 			Title:     "Внешнее соединение",
 			Message:   fmt.Sprintf("%s (%s, %s, PID: %v)", remoteAddr, connType, status, conn.Pid),
@@ -195,6 +215,7 @@ func analyzeNetwork(connections []networks) []Anomaly {
 	}
 	return anomalies
 }
+
 // I fail to explain things happening here
 func analyzeEmptyLogs(c *Collector) []Anomaly {
 	var anomalies []Anomaly
@@ -252,7 +273,7 @@ func analyzeDeletedBashHistory(c *Collector) []Anomaly {
 	}
 	defer unix.Close(fd)
 
-// somehow, it was triggered by these, so I had to add another whitelist
+	// somehow, it was triggered by these, so I had to add another whitelist
 	skipItems := map[string]bool{
 		"passwd":   true,
 		"shadow":   true,
@@ -348,13 +369,13 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 				bpos += int(reclen)
 				continue
 			}
-// reads user's bash_history
+			// reads user's bash_history
 			historyPath := usersDir + userName + "/bash_history"
 			content, err := readSmallFile(historyPath)
 			if err == nil && content != "" {
 				lines := strings.Split(content, "\n")
 				for _, line := range lines {
-				// looks for scp and rsync
+					// looks for scp and rsync
 					if strings.Contains(line, "scp ") || strings.Contains(line, "rsync ") {
 						fields := strings.Fields(line)
 						for _, field := range fields {
@@ -385,11 +406,12 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 	}
 	return anomalies
 }
+
 // looks for signs of disabling security systems
 func analyzeSecurityDisabled(c *Collector) []Anomaly {
 	var anomalies []Anomaly
 	usersDir := fmt.Sprintf("%s/users/", c.MainDirectory)
-// another whitelist
+	// another whitelist
 	suspiciousCommands := []string{
 		"setenforce 0", "selinux=0", "selinux=disabled",
 		"systemctl stop apparmor", "systemctl disable apparmor", "aa-disable",
@@ -422,7 +444,7 @@ func analyzeSecurityDisabled(c *Collector) []Anomaly {
 				bpos += int(reclen)
 				continue
 			}
-//reads .bash_history and adds an anomaly if something suspicious is found
+			//reads .bash_history and adds an anomaly if something suspicious is found
 			historyPath := usersDir + userName + "/bash_history"
 			content, err := readSmallFile(historyPath)
 			if err == nil && content != "" {
@@ -445,10 +467,11 @@ func analyzeSecurityDisabled(c *Collector) []Anomaly {
 	}
 	return anomalies
 }
+
 // seeks for sudo without TTY (oh whoah really?)
 func analyzeSudoWithoutTTY(processes []processesId) []Anomaly {
 	var anomalies []Anomaly
-// looks for sudo processes in general
+	// looks for sudo processes in general
 	for _, p := range processes {
 		processName := fmt.Sprintf("%v", p.Name)
 		if processName != "sudo" {
@@ -456,7 +479,7 @@ func analyzeSudoWithoutTTY(processes []processesId) []Anomaly {
 		}
 		fdInterface := p.FileDescriptor
 		hasTTY := false
-// looks for sudo with terminal, if sudo is without terminal - anomaly found
+		// looks for sudo with terminal, if sudo is without terminal - anomaly found
 		switch v := fdInterface.(type) {
 		case []interface{}:
 			for _, f := range v {
@@ -501,12 +524,13 @@ func readSmallFile(path string) (string, error) {
 	}
 	return string(buf[:n]), nil
 }
+
 // creates timeline beginning from assembly launch
 func buildTimeline(anomalies []Anomaly, processes []processesId, connections []networks) []TimelineEvent {
 	var timeline []TimelineEvent
 	now := getTimeUtc()
 	timeline = append(timeline, TimelineEvent{Timestamp: now, Event: "Запуск сбора"})
-// deduplication for timeline
+	// deduplication for timeline
 	seen := make(map[string]bool)
 	for _, a := range anomalies {
 		key := a.Title + a.Message
@@ -522,6 +546,7 @@ func buildTimeline(anomalies []Anomaly, processes []processesId, connections []n
 	sort.Slice(timeline, func(i, j int) bool { return timeline[i].Timestamp > timeline[j].Timestamp })
 	return timeline
 }
+
 // from here starts some sort of magic that builds all the HTML so u should not bother
 func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	startTime := time.Now().UTC()
@@ -580,7 +605,6 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	}
 
 	report.Timeline = buildTimeline(report.Anomalies, processes, connections)
-
 
 	htmlContent := buildHTMLString(report, systemStr, processesStr, networksStr, kernelStr)
 

@@ -66,6 +66,9 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 	// Завершение процесса сбора информации и запись данных в json
 	loggingJson(c, &json_info, "INFO", true, c.JsonFile)
 
+	// Генерация пароля для архива и очистка
+	finalizeArchive(c)
+
 	elapsed := time.Since(start)
 	result := fmt.Sprintf("Finished retrieving artifacts. The program ran in %v.", elapsed)
 	loggingFilePlusConsole(c, result, "DONE", nil)
