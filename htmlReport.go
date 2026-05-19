@@ -29,7 +29,6 @@ type HTMLReport struct {
 	Timeline  []TimelineEvent
 }
 
-// processes whitelist (to prevent inclusion in report)
 var systemProcessesWhitelist = map[string]bool{
 	"kworker": true, "systemd": true, "sshd": true, "cron": true, "bash": true,
 	"zsh": true, "ps": true, "grep": true, "awk": true, "sed": true,
@@ -37,7 +36,6 @@ var systemProcessesWhitelist = map[string]bool{
 	"migration": true, "watchdog": true, "kswapd0": true, "kdevtmpfs": true,
 }
 
-// same stuff but for IPs
 var trustedExternalNetworks = []struct {
 	start string
 	end   string
@@ -54,8 +52,8 @@ var trustedExternalNetworks = []struct {
 	{"20.0.0.0", "20.255.255.255"}, {"40.0.0.0", "40.255.255.255"},
 }
 
-func createHtmlReport(c *Collector, json_info []Info) []Info {
-	err := generateHTMLReport(c, json_info)
+func createHtmlReport(c *Collector, jsonInfo []Info) []Info {
+	err := generateHTMLReport(c, jsonInfo)
 	if err != nil {
 		loggingFilePlusConsole(c, "Failed to generate HTML report", "WARNING", err)
 	} else {
@@ -64,9 +62,9 @@ func createHtmlReport(c *Collector, json_info []Info) []Info {
 			Value: c.MainDirectory + "/report.html",
 			Time:  getTimeUtc(),
 		}
-		json_info = append(json_info, infoHtml)
+		jsonInfo = append(jsonInfo, infoHtml)
 	}
-	return json_info
+	return jsonInfo
 }
 
 func isIPInTrustedRange(ip string) bool {
@@ -77,7 +75,6 @@ func isIPInTrustedRange(ip string) bool {
 	if len(parts) != 4 {
 		return false
 	}
-	// conversion into 32bit
 	var ipNum uint32
 	for i := 0; i < 4; i++ {
 		num, _ := strconv.Atoi(parts[i])
@@ -103,7 +100,6 @@ func isIPInTrustedRange(ip string) bool {
 	return false
 }
 
-// checks if IP is from class A-C private networks
 func isPrivateIP(ip string) bool {
 	if ip == "" || ip == "0.0.0.0" || ip == "::" {
 		return true
@@ -126,8 +122,6 @@ func isPrivateIP(ip string) bool {
 	return false
 }
 
-// input: slice of processes from processes.json, return: slice of anomalies
-// suspicious names - take a wild guess
 func analyzeProcesses(processes []processesId) []Anomaly {
 	var anomalies []Anomaly
 	suspiciousNames := []string{
@@ -173,7 +167,6 @@ func analyzeProcesses(processes []processesId) []Anomaly {
 	return anomalies
 }
 
-// input: slice of connections from active_networks.json, return: anomalies slice, seen - deduplication map
 func analyzeNetwork(connections []networks) []Anomaly {
 	var anomalies []Anomaly
 	seen := make(map[string]bool)
@@ -183,7 +176,7 @@ func analyzeNetwork(connections []networks) []Anomaly {
 		status := fmt.Sprintf("%v", conn.Status)
 		connType := fmt.Sprintf("%v", conn.Type)
 		pid := fmt.Sprintf("%v", conn.Pid)
-		// looks only for ESTABLISHED connections
+
 		if status == "TIME_WAIT" || status == "CLOSE_WAIT" {
 			continue
 		}
@@ -200,13 +193,13 @@ func analyzeNetwork(connections []networks) []Anomaly {
 		if isIPInTrustedRange(ip) {
 			continue
 		}
-		// generates key from addr, status and pid, if it exists - skips
+
 		key := fmt.Sprintf("%s_%s_%s", remoteAddr, status, pid)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		// adds anomaly
+
 		anomalies = append(anomalies, Anomaly{
 			Title:     "Внешнее соединение",
 			Message:   fmt.Sprintf("%s (%s, %s, PID: %v)", remoteAddr, connType, status, conn.Pid),
@@ -216,7 +209,6 @@ func analyzeNetwork(connections []networks) []Anomaly {
 	return anomalies
 }
 
-// I fail to explain things happening here
 func analyzeEmptyLogs(c *Collector) []Anomaly {
 	var anomalies []Anomaly
 	logsDir := fmt.Sprintf("%s/log/", c.MainDirectory)
@@ -273,13 +265,9 @@ func analyzeDeletedBashHistory(c *Collector) []Anomaly {
 	}
 	defer unix.Close(fd)
 
-	// somehow, it was triggered by these, so I had to add another whitelist
 	skipItems := map[string]bool{
-		"passwd":   true,
-		"shadow":   true,
-		"sessions": true,
-		".":        true,
-		"..":       true,
+		"passwd": true, "shadow": true, "sessions": true,
+		".": true, "..": true,
 	}
 
 	buf := make([]byte, 8192)
@@ -369,13 +357,12 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 				bpos += int(reclen)
 				continue
 			}
-			// reads user's bash_history
+
 			historyPath := usersDir + userName + "/bash_history"
 			content, err := readSmallFile(historyPath)
 			if err == nil && content != "" {
 				lines := strings.Split(content, "\n")
 				for _, line := range lines {
-					// looks for scp and rsync
 					if strings.Contains(line, "scp ") || strings.Contains(line, "rsync ") {
 						fields := strings.Fields(line)
 						for _, field := range fields {
@@ -388,7 +375,6 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 							} else if strings.Contains(field, ":") && !strings.Contains(field, "://") {
 								hostPart = strings.Split(field, ":")[0]
 							}
-							// if host is external and not trusted, adds an anomaly to report
 							if hostPart != "" && !isPrivateIP(hostPart) && !isIPInTrustedRange(hostPart) {
 								anomalies = append(anomalies, Anomaly{
 									Title:     "Эксфильтрация данных",
@@ -407,11 +393,10 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 	return anomalies
 }
 
-// looks for signs of disabling security systems
 func analyzeSecurityDisabled(c *Collector) []Anomaly {
 	var anomalies []Anomaly
 	usersDir := fmt.Sprintf("%s/users/", c.MainDirectory)
-	// another whitelist
+
 	suspiciousCommands := []string{
 		"setenforce 0", "selinux=0", "selinux=disabled",
 		"systemctl stop apparmor", "systemctl disable apparmor", "aa-disable",
@@ -444,7 +429,7 @@ func analyzeSecurityDisabled(c *Collector) []Anomaly {
 				bpos += int(reclen)
 				continue
 			}
-			//reads .bash_history and adds an anomaly if something suspicious is found
+
 			historyPath := usersDir + userName + "/bash_history"
 			content, err := readSmallFile(historyPath)
 			if err == nil && content != "" {
@@ -468,10 +453,9 @@ func analyzeSecurityDisabled(c *Collector) []Anomaly {
 	return anomalies
 }
 
-// seeks for sudo without TTY (oh whoah really?)
 func analyzeSudoWithoutTTY(processes []processesId) []Anomaly {
 	var anomalies []Anomaly
-	// looks for sudo processes in general
+
 	for _, p := range processes {
 		processName := fmt.Sprintf("%v", p.Name)
 		if processName != "sudo" {
@@ -479,7 +463,7 @@ func analyzeSudoWithoutTTY(processes []processesId) []Anomaly {
 		}
 		fdInterface := p.FileDescriptor
 		hasTTY := false
-		// looks for sudo with terminal, if sudo is without terminal - anomaly found
+
 		switch v := fdInterface.(type) {
 		case []interface{}:
 			for _, f := range v {
@@ -525,12 +509,11 @@ func readSmallFile(path string) (string, error) {
 	return string(buf[:n]), nil
 }
 
-// creates timeline beginning from assembly launch
 func buildTimeline(anomalies []Anomaly, processes []processesId, connections []networks) []TimelineEvent {
 	var timeline []TimelineEvent
 	now := getTimeUtc()
 	timeline = append(timeline, TimelineEvent{Timestamp: now, Event: "Запуск сбора"})
-	// deduplication for timeline
+
 	seen := make(map[string]bool)
 	for _, a := range anomalies {
 		key := a.Title + a.Message
@@ -542,12 +525,10 @@ func buildTimeline(anomalies []Anomaly, processes []processesId, connections []n
 	}
 
 	timeline = append(timeline, TimelineEvent{Timestamp: now, Event: fmt.Sprintf("Процессов: %d, Соединений: %d", len(processes), len(connections))})
-	// lists resulting count of the processes and connections
 	sort.Slice(timeline, func(i, j int) bool { return timeline[i].Timestamp > timeline[j].Timestamp })
 	return timeline
 }
 
-// from here starts some sort of magic that builds all the HTML so u should not bother
 func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	startTime := time.Now().UTC()
 	loggingFilePlusConsole(c, "Generating HTML report...", "INFO", nil)
@@ -562,12 +543,9 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	processesPath := fmt.Sprintf("%s/processes.json", c.MainDirectory)
 	processesData, _ := readJSONFile(processesPath)
 	var processes []processesId
-	processesStr := "[]"
 	if processesData != nil {
-		jsonBytes, _ := json.MarshalIndent(processesData, "", "  ")
-		processesStr = string(jsonBytes)
+		jsonBytes, _ := json.Marshal(processesData)
 		json.Unmarshal(jsonBytes, &processes)
-
 		report.Anomalies = append(report.Anomalies, analyzeProcesses(processes)...)
 		report.Anomalies = append(report.Anomalies, analyzeSudoWithoutTTY(processes)...)
 	}
@@ -575,10 +553,8 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	networksPath := fmt.Sprintf("%s/active_networks.json", c.MainDirectory)
 	networksData, _ := readJSONFile(networksPath)
 	var connections []networks
-	networksStr := "[]"
 	if networksData != nil {
-		jsonBytes, _ := json.MarshalIndent(networksData, "", "  ")
-		networksStr = string(jsonBytes)
+		jsonBytes, _ := json.Marshal(networksData)
 		json.Unmarshal(jsonBytes, &connections)
 		report.Anomalies = append(report.Anomalies, analyzeNetwork(connections)...)
 	}
@@ -588,25 +564,12 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	report.Anomalies = append(report.Anomalies, analyzeDeletedBashHistory(c)...)
 	report.Anomalies = append(report.Anomalies, analyzeEmptyLogs(c)...)
 
-	systemPath := fmt.Sprintf("%s/system_info.json", c.MainDirectory)
-	systemData, _ := readJSONFile(systemPath)
-	systemStr := "{}"
-	if systemData != nil {
-		sysBytes, _ := json.MarshalIndent(systemData, "", "  ")
-		systemStr = string(sysBytes)
-	}
-
-	kernelPath := fmt.Sprintf("%s/kernel_modules.json", c.MainDirectory)
-	kernelData, _ := readJSONFile(kernelPath)
-	kernelStr := "[]"
-	if kernelData != nil {
-		kernelBytes, _ := json.MarshalIndent(kernelData, "", "  ")
-		kernelStr = string(kernelBytes)
-	}
+	systemData, _ := readJSONFile(fmt.Sprintf("%s/system_info.json", c.MainDirectory))
+	kernelData, _ := readJSONFile(fmt.Sprintf("%s/kernel_modules.json", c.MainDirectory))
 
 	report.Timeline = buildTimeline(report.Anomalies, processes, connections)
 
-	htmlContent := buildHTMLString(report, systemStr, processesStr, networksStr, kernelStr)
+	htmlContent := buildHTMLTables(report, systemData, processesData, networksData, kernelData)
 
 	htmlPath := fmt.Sprintf("%s/report.html", c.MainDirectory)
 	fd, err := unix.Open(htmlPath, unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC, 0644)
@@ -660,7 +623,123 @@ func readJSONFile(path string) (interface{}, error) {
 	return result, nil
 }
 
-func buildHTMLString(report HTMLReport, systemStr, processesStr, networksStr, kernelStr string) string {
+// formatSystemTable - системная информация в таблицу
+func formatSystemTable(data interface{}) string {
+	sysSlice, ok := data.([]interface{})
+	if !ok {
+		return "<tr><td colspan=\"2\">Нет данных</td></tr>"
+	}
+
+	var rows string
+	for _, item := range sysSlice {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		title := fmt.Sprintf("%v", itemMap["title"])
+		value := fmt.Sprintf("%v", itemMap["value"])
+
+		var displayTitle string
+		switch title {
+		case "Kernel":
+			displayTitle = "Ядро"
+		case "Hostname":
+			displayTitle = "Имя хоста"
+		case "Uptime":
+			displayTitle = "Время работы"
+		case "OS":
+			displayTitle = "Операционная система"
+		default:
+			displayTitle = title
+		}
+		rows += fmt.Sprintf("<tr><td class=\"label\">%s</td><td>%s</td></tr>", displayTitle, value)
+	}
+	return rows
+}
+
+// formatKernelTable - модули ядра в таблицу
+// formatKernelTable - модули ядра в таблицу
+func formatKernelTable(data interface{}) string {
+	modules, ok := data.([]interface{})
+	if !ok || len(modules) == 0 {
+		return "<tr><td colspan=\"4\">Нет данных</td></tr>"
+	}
+
+	var rows string
+	for _, module := range modules {
+		modMap, ok := module.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name := fmt.Sprintf("%v", modMap["name"])
+		size := fmt.Sprintf("%v", modMap["size"])
+		refcnt := fmt.Sprintf("%v", modMap["refcnt"])
+		usedby := fmt.Sprintf("%v", modMap["usedby"])
+		if usedby == "-" || usedby == "" {
+			usedby = "нет"
+		}
+
+		rows += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>", 
+			name, size, refcnt, usedby)
+	}
+	return rows
+}
+// formatProcessesTable - процессы в таблицу
+func formatProcessesTable(data interface{}) string {
+	processes, ok := data.([]interface{})
+	if !ok || len(processes) == 0 {
+		return "<tr><td colspan=\"6\">Нет данных</td></tr>"
+	}
+
+	var rows string
+	for _, proc := range processes {
+		procMap, ok := proc.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Пропускаем пустые записи
+		if procMap["pid"] == nil && procMap["title"] == nil {
+			continue
+		}
+		pid := fmt.Sprintf("%v", procMap["pid"])
+		name := fmt.Sprintf("%v", procMap["title"])
+		user := fmt.Sprintf("%v", procMap["user"])
+		ram := fmt.Sprintf("%v", procMap["ram"])
+		status := fmt.Sprintf("%v", procMap["status"])
+		uptime := fmt.Sprintf("%v", procMap["uptime"])
+
+		rows += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
+			pid, name, user, ram, status, uptime)
+	}
+	return rows
+}
+
+// formatNetworkTable - сетевые соединения в таблицу
+func formatNetworkTable(data interface{}) string {
+	connections, ok := data.([]interface{})
+	if !ok || len(connections) == 0 {
+		return "<tr><td colspan=\"5\">Нет данных</td></tr>"
+	}
+
+	var rows string
+	for _, conn := range connections {
+		connMap, ok := conn.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		pid := fmt.Sprintf("%v", connMap["pid"])
+		localAddr := fmt.Sprintf("%v", connMap["localaddr"])
+		remoteAddr := fmt.Sprintf("%v", connMap["remoteaddr"])
+		connType := fmt.Sprintf("%v", connMap["type"])
+		status := fmt.Sprintf("%v", connMap["status"])
+
+		rows += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
+			pid, localAddr, remoteAddr, connType, status)
+	}
+	return rows
+}
+
+func buildHTMLTables(report HTMLReport, systemData, processesData, networksData, kernelData interface{}) string {
 	seen := make(map[string]bool)
 	var uniqueAnomalies []Anomaly
 	for _, a := range report.Anomalies {
@@ -682,7 +761,7 @@ func buildHTMLString(report HTMLReport, systemStr, processesStr, networksStr, ke
 		if len(ts) > 19 {
 			ts = ts[:19]
 		}
-		anomaliesHTML += fmt.Sprintf("<div>• %s: %s (%s)</div>", title, msg, ts)
+		anomaliesHTML += fmt.Sprintf("<div class=\"anomaly-item\">• %s: %s (%s)</div>", title, msg, ts)
 	}
 	if anomaliesHTML == "" {
 		anomaliesHTML = "<div>-</div>"
@@ -695,16 +774,16 @@ func buildHTMLString(report HTMLReport, systemStr, processesStr, networksStr, ke
 		if len(ts) > 19 {
 			ts = ts[:19]
 		}
-		timelineHTML += fmt.Sprintf("<div>• %s: %s</div>", ts, event)
+		timelineHTML += fmt.Sprintf("<div class=\"timeline-item\">• %s: %s</div>", ts, event)
 	}
 	if timelineHTML == "" {
 		timelineHTML = "<div>-</div>"
 	}
 
-	systemStr = escapeJSON(systemStr)
-	processesStr = escapeJSON(processesStr)
-	networksStr = escapeJSON(networksStr)
-	kernelStr = escapeJSON(kernelStr)
+	systemTable := formatSystemTable(systemData)
+	kernelTable := formatKernelTable(kernelData)
+	processesTable := formatProcessesTable(processesData)
+	networkTable := formatNetworkTable(networksData)
 
 	hostname := report.Hostname
 	if hostname == "" {
@@ -718,75 +797,236 @@ func buildHTMLString(report HTMLReport, systemStr, processesStr, networksStr, ke
     <meta charset="UTF-8">
     <title>ArtiCol - отчет</title>
     <style>
-        body { background-color: #000000; color: #ffffff; font-family: monospace; padding: 20px; margin: 0; }
-        pre { background-color: #111111; color: #00ff00; padding: 15px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; font-size: 13px; border: none; margin: 0; }
-        .section { margin-bottom: 30px; border: 1px solid #333333; }
-        .section-title { background-color: #111111; padding: 10px; font-weight: bold; border-bottom: 1px solid #333333; cursor: pointer; user-select: none; }
-        .section-title:hover { background-color: #1a1a1a; }
-        .section-content { padding: 15px; display: block; }
-        .section-content.collapsed { display: none; }
-        h1 { font-size: 1.5em; margin-bottom: 20px; color: #00ff00; }
-        .info { color: #888888; margin-bottom: 20px; }
-        hr { border-color: #333333; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: #0a0e1a;
+            color: #c0c0c0;
+            font-family: 'Segoe UI', 'Monaco', monospace;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #c0c0c0;
+            font-weight: normal;
+        }
+        .info {
+            color: #808080;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #2a2a3a;
+            margin: 20px 0;
+        }
+        .section {
+            margin-bottom: 30px;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .section-title {
+            background-color: #111118;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #2a2a3a;
+            cursor: pointer;
+            user-select: none;
+            font-size: 14px;
+        }
+        .section-title:hover {
+            background-color: #1a1a22;
+        }
+        .section-content {
+            padding: 15px;
+            display: block;
+            overflow-x: auto;
+        }
+        .section-content.collapsed {
+            display: none;
+        }
+        table {
+            width: 100%%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th {
+            text-align: left;
+            padding: 8px 10px;
+            background-color: #111118;
+            border-bottom: 1px solid #2a2a3a;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+        td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #1a1a22;
+            vertical-align: top;
+        }
+        tr:hover td {
+            background-color: #111118;
+        }
+        td.label {
+            font-weight: 600;
+            width: 200px;
+            color: #a0a0a0;
+        }
+        .anomaly-item, .timeline-item {
+            padding: 6px 0;
+            font-family: monospace;
+            font-size: 12px;
+            border-left: 3px solid #ffaa44;
+            padding-left: 10px;
+            margin: 5px 0;
+        }
+        .timeline-item {
+            border-left-color: #4facfe;
+        }
+        .collapsed-indicator {
+            float: right;
+            font-size: 12px;
+        }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .section-content { padding: 10px; }
+            th, td { padding: 4px 6px; font-size: 10px; }
+            td.label { width: 120px; }
+        }
     </style>
 </head>
 <body>
+<div class="container">
 <h1>ArtiCol - отчет по сбору артефактов</h1>
-<div class="info">Хост: %s | Время: %s</div>
+<div class="info">Хост: %s | Время сбора: %s</div>
 <hr>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Аномалии (%d)</div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Аномалии (%d)
+        <span class="collapsed-indicator">▼</span>
+    </div>
     <div class="section-content">%s</div>
 </div>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Таймлайн</div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Таймлайн
+        <span class="collapsed-indicator">▼</span>
+    </div>
     <div class="section-content">%s</div>
 </div>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Система</div>
-    <div class="section-content"><pre>%s</pre></div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Системная информация
+        <span class="collapsed-indicator">▼</span>
+    </div>
+    <div class="section-content">
+        <table>
+            <tbody>%s</tbody>
+        </table>
+    </div>
 </div>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Процессы</div>
-    <div class="section-content"><pre>%s</pre></div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Запущенные процессы
+        <span class="collapsed-indicator">▼</span>
+    </div>
+    <div class="section-content">
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>PID</th>
+                        <th>Название</th>
+                        <th>Пользователь</th>
+                        <th>RAM (МБ)</th>
+                        <th>Статус</th>
+                        <th>Время работы (с)</th>
+                    </tr>
+                </thead>
+                <tbody>%s</tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Сеть</div>
-    <div class="section-content"><pre>%s</pre></div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Сетевые соединения
+        <span class="collapsed-indicator">▼</span>
+    </div>
+    <div class="section-content">
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>PID</th>
+                        <th>Локальный адрес</th>
+                        <th>Удалённый адрес</th>
+                        <th>Тип</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody>%s</tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <div class="section">
-    <div class="section-title" onclick="toggleSection(this)">Модули ядра</div>
-    <div class="section-content"><pre>%s</pre></div>
+    <div class="section-title" onclick="toggleSection(this)">
+        Модули ядра
+        <span class="collapsed-indicator">▼</span>
+    </div>
+    <div class="section-content">
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Название модуля</th>
+                        <th>Объём (байт)</th>
+                        <th>Количество ссылок</th>
+                        <th>Используется модулями</th>
+                    </tr>
+                </thead>
+                <tbody>%s</tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <script>
 function toggleSection(title) {
     var content = title.nextElementSibling;
+    var indicator = title.querySelector('.collapsed-indicator');
     content.classList.toggle('collapsed');
+    if (indicator) {
+        indicator.style.transform = content.classList.contains('collapsed') ? 'rotate(-90deg)' : 'rotate(0deg)';
+    }
 }
 </script>
+</div>
 </body>
 </html>`,
 		hostname, startTime,
 		len(uniqueAnomalies),
 		anomaliesHTML,
 		timelineHTML,
-		systemStr,
-		processesStr,
-		networksStr,
-		kernelStr,
+		systemTable,
+		processesTable,
+		networkTable,
+		kernelTable,
 	)
-}
-
-func escapeJSON(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	return s
 }

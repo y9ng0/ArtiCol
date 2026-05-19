@@ -22,7 +22,7 @@
 # Расшифровка архива
 Для расшифровки необходимо использовать отдельную утилиту `decrypt`:
 ```bash
-go build -tags decrypt -o decrypt decryptUtl/decrypt.go
+go build -tags decrypt -o decrypt decryptUtil/decrypt.go
 ```
 Использование утилиты
 ``` bash
