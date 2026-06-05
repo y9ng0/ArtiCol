@@ -8,13 +8,19 @@
 2. Если уже есть бинарный файл, то просто запустите его через `sudo /path/to/ArtiCol`
 
 # Стек собираемых данных
-1. `/etc/passwd` и `/etc/shadow`;
+1. `/etc/passwd`, `/etc/shadow`, `/etc/group`, `/etc/sudoers` и `/etc/sudoers.d/`;
 2. Все логи из `/var/log/`;
-3. `.bash_history` каждого пользователя;
+3. `.bash_history` и `.zsh_history` каждого пользователя;
 4. Все сессии из `/var/run/systemd/sessions`;
 5. Все сетевые соединения и все процессы;
 6. Все модули из `/proc/modules`;
-7. Информация об `OS`, `Kernel`, `Uptime`, `Hostname`.
+7. Таблица маршрутизации `/proc/net/route` и ARP-таблица `/proc/net/arp`;
+8. Конфигурационные файлы `/etc/rc.local`, `/etc/crontab`, `/etc/resolv.conf`, `/etc/hosts`;
+9. Информация об `OS`, `Kernel`, `Uptime`, `Hostname`;
+10. Содержимое временных директорий `/tmp/`, `/dev/shm/`, `/var/tmp/`;
+11. Сетевые конфигурации `/etc/ufw/`, `/etc/iptables/`, `/etc/ssh/`;
+12. Cron-директории `/etc/cron.d/`, `/etc/cron.daily/`, `/etc/cron.hourly/`, `/etc/cron.weekly/`, `/etc/cron.monthly/`, `/etc/cron.yearly/`, `/var/spool/cron/crontabs/`;
+13. Systemd-юниты `/run/systemd/system/`, `/etc/systemd/system/`.
 
 # Архивация и шифрование
 По окончании сбора все данные упаковываются в зашифрованный архив напрямую на внешнем носителе без создания временных файлов в системе. Используется AES-256-CTR с генерацией случайного IV. Пароль выводится в консоль в конце работы программы — сохраните его для расшифровки.

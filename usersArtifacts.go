@@ -124,7 +124,7 @@ func getShadow(c *Collector, infoSys *Info, flag bool) {
 // infoSys - информация об объекте
 // flag - флаг запуска (true - root, false - user)
 func getHomeDir(c *Collector, infoSys *Info, flag bool) {
-	loggingFilePlusConsole(c, "Starting to retrieve \"bash history\".", "INFO", nil)
+	loggingFilePlusConsole(c, "Starting to retrieve \"history files\".", "INFO", nil)
 
 	// Заполняем информацию об объекте
 	infoSys.Title = "bash_history"
@@ -156,11 +156,17 @@ func getHomeDir(c *Collector, infoSys *Info, flag bool) {
 			}
 		}
 		path_directory := fmt.Sprintf("%v/users/", c.MainDirectory)
+		err = makeDirectory(path_directory)
+		if err != nil {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			return
+		}
 		var wg sync.WaitGroup
 
 		// Если флаг true, то извлекаем bash history для всех пользователей
 		if flag {
-			loggingFile(c, "Starting to retrieve \"bash history\" for all users.", "INFO", nil)
+			loggingFile(c, "Starting to retrieve \"history files\" for all users.", "INFO", nil)
 			for _, d := range data {
 				line := bytes.Split(d, []byte(":"))
 				name := line[0]
@@ -179,7 +185,7 @@ func getHomeDir(c *Collector, infoSys *Info, flag bool) {
 				}
 			}
 		} else {
-			loggingFile(c, fmt.Sprintf("Starting to retrieve \"bash history\" for user \"%s\".", c.UserName), "INFO", nil)
+			loggingFile(c, fmt.Sprintf("Starting to retrieve \"history files\" for user \"%s\".", c.UserName), "INFO", nil)
 			for _, d := range data {
 				line := bytes.Split(d, []byte(":"))
 				name := line[0]
@@ -197,7 +203,7 @@ func getHomeDir(c *Collector, infoSys *Info, flag bool) {
 
 		wg.Wait()
 		infoSys.Value = path_directory
-		loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"bash history\" to \"%v\".", infoSys.Value), "INFO", nil)
+		loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"history files\" to \"%v\".", infoSys.Value), "INFO", nil)
 	} else {
 		loggingFilePlusConsole(c, fmt.Sprintf("Failed to open file \"%v\".", pathUsers), "ERROR", err)
 		infoSys.Value = fmt.Sprintf("Error: %v", err)
@@ -219,8 +225,20 @@ func getHistory(c *Collector, name, home_dir []byte) {
 	}
 	loggingFile(c, fmt.Sprintf("Finished creating directory \"%v\".", user_dir), "INFO", nil)
 
-	sourcePath := string(home_dir) + "/.bash_history"
-	destination := fmt.Sprintf("%v/users/%s/bash_history", c.MainDirectory, name)
+	bashSource := string(home_dir) + "/.bash_history"
+	bashDest := fmt.Sprintf("%v/users/%s/bash_history", c.MainDirectory, name)
+	bashErr := copyHistoryFile(c, bashSource, bashDest, "bash_history", name)
+
+	zshSource := string(home_dir) + "/.zsh_history"
+	zshDest := fmt.Sprintf("%v/users/%s/zsh_history", c.MainDirectory, name)
+	zshErr := copyHistoryFile(c, zshSource, zshDest, "zsh_history", name)
+
+	if bashErr != nil && zshErr != nil {
+		unix.Rmdir(user_dir)
+	}
+}
+
+func copyHistoryFile(c *Collector, sourcePath, destination, fileType string, name []byte) error {
 	loggingFile(c, fmt.Sprintf("Starting to copy file \"%v\" to \"%v\".", sourcePath, destination), "INFO", nil)
 
 	sysHash, sysErr := computeFileHash(sourcePath)
@@ -230,8 +248,7 @@ func getHistory(c *Collector, name, home_dir []byte) {
 		loggingFile(c, fmt.Sprintf("Finished hashing original file \"%s\" (SHA-256: %s).", sourcePath, sysHash), "INFO", nil)
 	}
 
-	err = CopyFile(c, sourcePath, destination)
-
+	err := CopyFile(c, sourcePath, destination)
 	if err == nil {
 		copyHash, copyErr := computeFileHash(destination)
 		if copyErr != nil {
@@ -244,13 +261,13 @@ func getHistory(c *Collector, name, home_dir []byte) {
 			}
 		}
 
-		text := fmt.Sprintf("Finished copying file \"bash_history\" for user \"%s\".", name)
+		text := fmt.Sprintf("Finished copying file \"%s\" for user \"%s\".", fileType, name)
 		loggingFile(c, text, "INFO", err)
 	} else {
-		unix.Rmdir(user_dir)
-		text := fmt.Sprintf("Failed to copy file \"bash_history\" for user \"%s\".", name)
+		text := fmt.Sprintf("Failed to copy file \"%s\" for user \"%s\".", fileType, name)
 		loggingFile(c, text, "ERROR", err)
 	}
+	return err
 }
 
 // getSessions - извлекает информацию об активных сессиях пользователей
@@ -262,9 +279,17 @@ func getSessions(c *Collector, infoSys *Info) {
 	infoSys.Title = "systemd sessions"
 	infoSys.Time = getTimeUtc()
 
+	parent_directory := fmt.Sprintf("%v/users/", c.MainDirectory)
+	err := makeDirectory(parent_directory)
+	if err != nil && err != unix.EEXIST {
+		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", parent_directory), "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+		return
+	}
+
 	sessions_directory := fmt.Sprintf("%v/users/sessions/", c.MainDirectory)
 	loggingFile(c, fmt.Sprintf("Starting to create directory \"%v\".", sessions_directory), "INFO", nil)
-	err := makeDirectory(sessions_directory)
+	err = makeDirectory(sessions_directory)
 	if err != nil {
 		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", sessions_directory), "ERROR", err)
 		infoSys.Value = fmt.Sprintf("Error: %v", err)
@@ -283,4 +308,144 @@ func getSessions(c *Collector, infoSys *Info) {
 
 	infoSys.Value = fmt.Sprintf("%v/users/sessions/", c.MainDirectory)
 	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"systemd sessions\" to \"%v\".", infoSys.Value), "INFO", nil)
+}
+
+// getGroup - извлекает файл /etc/group
+func getGroup(c *Collector, infoSys *Info) {
+	loggingFilePlusConsole(c, "Starting to retrieve \"group\".", "INFO", nil)
+
+	infoSys.Title = "/etc/group"
+	infoSys.Time = getTimeUtc()
+
+	path_directory := fmt.Sprintf("%v/users/", c.MainDirectory)
+	err := makeDirectory(path_directory)
+	if err != nil {
+		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+		return
+	}
+
+	sourcePath := "/etc/group"
+	destination := path_directory + "group"
+	loggingFile(c, fmt.Sprintf("Starting to copy file \"%v\" to \"%v\".", sourcePath, destination), "INFO", nil)
+
+	sysHash, sysErr := computeFileHash(sourcePath)
+	if sysErr != nil {
+		loggingFile(c, fmt.Sprintf("Failed to hash original file \"%s\".", sourcePath), "WARNING", sysErr)
+	} else {
+		loggingFile(c, fmt.Sprintf("Finished hashing original file \"%s\" (SHA-256: %s).", sourcePath, sysHash), "INFO", nil)
+	}
+
+	err = CopyFile(c, sourcePath, destination)
+	if err == nil {
+		copyHash, copyErr := computeFileHash(destination)
+		if copyErr != nil {
+			loggingFile(c, fmt.Sprintf("Failed to hash copied file \"%s\".", destination), "WARNING", copyErr)
+		} else if sysErr == nil {
+			if sysHash == copyHash {
+				loggingFile(c, fmt.Sprintf("Hash match found for file \"%s\".", destination), "INFO", nil)
+			} else {
+				loggingFile(c, fmt.Sprintf("Hash mismatch for file \"%s\" (Original: %s, Copy: %s).", destination, sysHash, copyHash), "ERROR", nil)
+			}
+		}
+		loggingFilePlusConsole(c, fmt.Sprintf("Finished copying file \"group\" to \"%s\".", destination), "INFO", err)
+		infoSys.Value = destination
+	} else {
+		loggingFilePlusConsole(c, "Failed to copy file \"group\".", "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+	}
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"group\" to \"%v\".", infoSys.Value), "INFO", nil)
+}
+
+// getSudoers - извлекает файл /etc/sudoers
+func getSudoers(c *Collector, infoSys *Info, flag bool) {
+	loggingFilePlusConsole(c, "Starting to retrieve \"sudoers\".", "INFO", nil)
+
+	infoSys.Title = "/etc/sudoers"
+	infoSys.Time = getTimeUtc()
+
+	if flag {
+		path_directory := fmt.Sprintf("%v/users/", c.MainDirectory)
+		err := makeDirectory(path_directory)
+		if err != nil {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			return
+		}
+
+		sourcePath := "/etc/sudoers"
+		destination := path_directory + "sudoers"
+		loggingFile(c, fmt.Sprintf("Starting to copy file \"%s\" to \"%s\".", sourcePath, destination), "INFO", nil)
+
+		sysHash, sysErr := computeFileHash(sourcePath)
+		if sysErr != nil {
+			loggingFile(c, fmt.Sprintf("Failed to hash original file \"%s\".", sourcePath), "WARNING", sysErr)
+		} else {
+			loggingFile(c, fmt.Sprintf("Finished hashing original file \"%s\" (SHA-256: %s).", sourcePath, sysHash), "INFO", nil)
+		}
+
+		err = CopyFile(c, sourcePath, destination)
+		if err == nil {
+			copyHash, copyErr := computeFileHash(destination)
+			if copyErr != nil {
+				loggingFile(c, fmt.Sprintf("Failed to hash copied file \"%s\".", destination), "WARNING", copyErr)
+			} else if sysErr == nil {
+				if sysHash == copyHash {
+					loggingFile(c, fmt.Sprintf("Hash match found for file \"%s\".", destination), "INFO", nil)
+				} else {
+					loggingFile(c, fmt.Sprintf("Hash mismatch for file \"%s\" (Original: %s, Copy: %s).", destination, sysHash, copyHash), "ERROR", nil)
+				}
+			}
+			loggingFilePlusConsole(c, fmt.Sprintf("Finished copying file \"sudoers\" to \"%s\".", destination), "INFO", err)
+			infoSys.Value = destination
+		} else {
+			loggingFilePlusConsole(c, "Failed to copy file \"sudoers\".", "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+		}
+	} else {
+		loggingFilePlusConsole(c, "Failed to retrieve \"sudoers\" (permission denied).", "ERROR", nil)
+		infoSys.Value = "Error: permission denied (root required)"
+	}
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"sudoers\" to \"%v\".", infoSys.Value), "INFO", nil)
+}
+
+// getSudoersD - рекурсивно копирует содержимое /etc/sudoers.d/
+func getSudoersD(c *Collector, infoSys *Info, flag bool) {
+	loggingFilePlusConsole(c, "Starting to retrieve \"sudoers.d\".", "INFO", nil)
+
+	infoSys.Title = "/etc/sudoers.d"
+	infoSys.Time = getTimeUtc()
+
+	if flag {
+		parent_directory := fmt.Sprintf("%v/users/", c.MainDirectory)
+		err := makeDirectory(parent_directory)
+		if err != nil && err != unix.EEXIST {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", parent_directory), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			return
+		}
+
+		dest_directory := fmt.Sprintf("%v/users/sudoers.d/", c.MainDirectory)
+		err = makeDirectory(dest_directory)
+		if err != nil && err != unix.EEXIST {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", dest_directory), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			return
+		}
+
+		loggingFile(c, "Starting to copy directory \"/etc/sudoers.d\".", "INFO", nil)
+		err = copyDirectory(c, "/etc/sudoers.d", dest_directory)
+		if err != nil {
+			loggingFilePlusConsole(c, "Failed to copy directory \"/etc/sudoers.d\".", "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			return
+		}
+		loggingFile(c, "Finished copying directory \"/etc/sudoers.d\".", "INFO", nil)
+
+		infoSys.Value = dest_directory
+	} else {
+		loggingFilePlusConsole(c, "Failed to retrieve \"sudoers.d\" (permission denied).", "ERROR", nil)
+		infoSys.Value = "Error: permission denied (root required)"
+	}
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"sudoers.d\" to \"%v\".", infoSys.Value), "INFO", nil)
 }

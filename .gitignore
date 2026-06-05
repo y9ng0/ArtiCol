@@ -4,4 +4,5 @@ ArtiCol
 artifacts*
 decrypt
 decrypted_archive.tar.gz
+decrypted_archive
 decrypted_output/

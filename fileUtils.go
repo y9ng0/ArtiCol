@@ -216,26 +216,66 @@ func jsonCreate(c *Collector, filename string) (int, error) {
 // destination - путь к целевому файлу
 // Возвращает ошибку или nil
 func CopyFile(c *Collector, source, destination string) error {
-	sfd, err := unix.Open(source, unix.O_RDONLY, 0)
-	defer unix.Close(sfd)
-	if err == nil {
-		var st unix.Stat_t
-		unix.Stat(source, &st)
-
-		dfd, err := unix.Open(destination, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(st.Mode))
-		if err != nil {
-			loggingFile(c, fmt.Sprintf("Failed to create file \"%v\".", destination), "ERROR", err)
-			return err
+	sysHash, sysErr := computeFileHash(source)
+	if sysErr != nil {
+		if sysErr == unix.ENOENT {
+			return sysErr
 		}
-		defer unix.Close(dfd)
-
-		_, err = unix.Sendfile(dfd, sfd, nil, int(st.Size))
-		if err != nil {
-			loggingFile(c, fmt.Sprintf("Failed to copy file \"%v\".", source), "ERROR", err)
-		}
-		return err
-	} else {
-		loggingFile(c, fmt.Sprintf("Failed to open file \"%v\".", source), "ERROR", err)
 	}
+
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		err := copyOnce(source, destination)
+		if err != nil {
+			lastErr = err
+			loggingFile(c, fmt.Sprintf("Failed to copy file from \"%s\" to \"%s\" (attempt %d/3).", source, destination, attempt), "ERROR", err)
+			continue
+		}
+
+		if sysErr == nil {
+			copyHash, copyErr := computeFileHash(destination)
+			if copyErr != nil {
+				lastErr = copyErr
+				unix.Unlink(destination)
+				loggingFile(c, fmt.Sprintf("Failed to hash copied file \"%s\" (attempt %d/3).", destination, attempt), "WARNING", copyErr)
+				continue
+			}
+
+			if sysHash == copyHash {
+				return nil
+			} else {
+				lastErr = fmt.Errorf("hash mismatch")
+				unix.Unlink(destination)
+				loggingFile(c, fmt.Sprintf("Hash mismatch for file \"%s\" (Original: %s, Copy: %s) on attempt %d/3. Deleting copy.", destination, sysHash, copyHash, attempt), "ERROR", nil)
+				continue
+			}
+		} else {
+			return nil
+		}
+	}
+
+	return lastErr
+}
+
+func copyOnce(source, destination string) error {
+	sfd, err := unix.Open(source, unix.O_RDONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(sfd)
+
+	var st unix.Stat_t
+	err = unix.Stat(source, &st)
+	if err != nil {
+		return err
+	}
+
+	dfd, err := unix.Open(destination, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(st.Mode))
+	if err != nil {
+		return err
+	}
+	defer unix.Close(dfd)
+
+	_, err = unix.Sendfile(dfd, sfd, nil, int(st.Size))
 	return err
 }

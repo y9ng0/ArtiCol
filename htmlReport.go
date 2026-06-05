@@ -320,6 +320,22 @@ func analyzeDeletedBashHistory(c *Collector) []Anomaly {
 					Timestamp: getTimeUtc(),
 				})
 			}
+
+			zshHistoryPath := itemPath + "/zsh_history"
+			var zshHistoryStat unix.Stat_t
+			if unix.Stat(zshHistoryPath, &zshHistoryStat) != nil {
+				anomalies = append(anomalies, Anomaly{
+					Title:     "Удаленный .zsh_history",
+					Message:   fmt.Sprintf("Пользователь %s: файл .zsh_history отсутствует", itemName),
+					Timestamp: getTimeUtc(),
+				})
+			} else if zshHistoryStat.Size == 0 {
+				anomalies = append(anomalies, Anomaly{
+					Title:     "Пустой .zsh_history",
+					Message:   fmt.Sprintf("Пользователь %s: файл .zsh_history пуст", itemName),
+					Timestamp: getTimeUtc(),
+				})
+			}
 			bpos += int(reclen)
 		}
 	}
@@ -358,30 +374,32 @@ func analyzeDataExfiltration(c *Collector) []Anomaly {
 				continue
 			}
 
-			historyPath := usersDir + userName + "/bash_history"
-			content, err := readSmallFile(historyPath)
-			if err == nil && content != "" {
-				lines := strings.Split(content, "\n")
-				for _, line := range lines {
-					if strings.Contains(line, "scp ") || strings.Contains(line, "rsync ") {
-						fields := strings.Fields(line)
-						for _, field := range fields {
-							var hostPart string
-							if strings.Contains(field, "@") {
-								parts := strings.Split(field, "@")
-								if len(parts) > 1 {
-									hostPart = strings.Split(parts[1], ":")[0]
+			for _, histFile := range []string{"bash_history", "zsh_history"} {
+				historyPath := usersDir + userName + "/" + histFile
+				content, err := readSmallFile(historyPath)
+				if err == nil && content != "" {
+					lines := strings.Split(content, "\n")
+					for _, line := range lines {
+						if strings.Contains(line, "scp ") || strings.Contains(line, "rsync ") {
+							fields := strings.Fields(line)
+							for _, field := range fields {
+								var hostPart string
+								if strings.Contains(field, "@") {
+									parts := strings.Split(field, "@")
+									if len(parts) > 1 {
+										hostPart = strings.Split(parts[1], ":")[0]
+									}
+								} else if strings.Contains(field, ":") && !strings.Contains(field, "://") {
+									hostPart = strings.Split(field, ":")[0]
 								}
-							} else if strings.Contains(field, ":") && !strings.Contains(field, "://") {
-								hostPart = strings.Split(field, ":")[0]
-							}
-							if hostPart != "" && !isPrivateIP(hostPart) && !isIPInTrustedRange(hostPart) {
-								anomalies = append(anomalies, Anomaly{
-									Title:     "Эксфильтрация данных",
-									Message:   fmt.Sprintf("Пользователь %s: %s", userName, strings.TrimSpace(line)),
-									Timestamp: getTimeUtc(),
-								})
-								break
+								if hostPart != "" && !isPrivateIP(hostPart) && !isIPInTrustedRange(hostPart) {
+									anomalies = append(anomalies, Anomaly{
+										Title:     "Эксфильтрация данных",
+										Message:   fmt.Sprintf("Пользователь %s: %s", userName, strings.TrimSpace(line)),
+										Timestamp: getTimeUtc(),
+									})
+									break
+								}
 							}
 						}
 					}
@@ -430,19 +448,21 @@ func analyzeSecurityDisabled(c *Collector) []Anomaly {
 				continue
 			}
 
-			historyPath := usersDir + userName + "/bash_history"
-			content, err := readSmallFile(historyPath)
-			if err == nil && content != "" {
-				lines := strings.Split(content, "\n")
-				for _, line := range lines {
-					for _, cmd := range suspiciousCommands {
-						if strings.Contains(line, cmd) {
-							anomalies = append(anomalies, Anomaly{
-								Title:     "Отключение защиты",
-								Message:   fmt.Sprintf("Пользователь %s: %s", userName, strings.TrimSpace(line)),
-								Timestamp: getTimeUtc(),
-							})
-							break
+			for _, histFile := range []string{"bash_history", "zsh_history"} {
+				historyPath := usersDir + userName + "/" + histFile
+				content, err := readSmallFile(historyPath)
+				if err == nil && content != "" {
+					lines := strings.Split(content, "\n")
+					for _, line := range lines {
+						for _, cmd := range suspiciousCommands {
+							if strings.Contains(line, cmd) {
+								anomalies = append(anomalies, Anomaly{
+									Title:     "Отключение защиты",
+									Message:   fmt.Sprintf("Пользователь %s: %s", userName, strings.TrimSpace(line)),
+									Timestamp: getTimeUtc(),
+								})
+								break
+							}
 						}
 					}
 				}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/shirou/gopsutil/v4/net"
+	"golang.org/x/sys/unix"
 )
 
 // getAllConnections - сбор информации о сетевых соединениях
@@ -67,3 +68,147 @@ func getAllConnections(c *Collector, json_info []Info) []Info {
 	loggingFilePlusConsole(c, "Finished retrieving TCP/UDP connections.", "INFO", nil)
 	return json_info
 }
+
+// getRoute - копирует /proc/net/route
+func getRoute(c *Collector, infoSys *Info) {
+	loggingFilePlusConsole(c, "Starting to retrieve \"routing table\".", "INFO", nil)
+
+	infoSys.Title = "routing table"
+	infoSys.Time = getTimeUtc()
+
+	path_directory := fmt.Sprintf("%v/networks/", c.MainDirectory)
+	err := makeDirectory(path_directory)
+	if err != nil {
+		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+		return
+	}
+
+	sourcePath := "/proc/net/route"
+	destination := path_directory + "route"
+	loggingFile(c, fmt.Sprintf("Starting to copy file \"%v\" to \"%v\".", sourcePath, destination), "INFO", nil)
+
+	err = CopyFile(c, sourcePath, destination)
+	if err == nil {
+		loggingFilePlusConsole(c, fmt.Sprintf("Finished copying file \"route\" to \"%s\".", destination), "INFO", err)
+		infoSys.Value = destination
+	} else {
+		loggingFilePlusConsole(c, "Failed to copy file \"route\".", "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+	}
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"routing table\" to \"%v\".", infoSys.Value), "INFO", nil)
+}
+
+// getArp - копирует /proc/net/arp
+func getArp(c *Collector, infoSys *Info) {
+	loggingFilePlusConsole(c, "Starting to retrieve \"arp table\".", "INFO", nil)
+
+	infoSys.Title = "arp table"
+	infoSys.Time = getTimeUtc()
+
+	path_directory := fmt.Sprintf("%v/networks/", c.MainDirectory)
+	err := makeDirectory(path_directory)
+	if err != nil && err != unix.EEXIST {
+		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+		return
+	}
+
+	sourcePath := "/proc/net/arp"
+	destination := path_directory + "arp"
+	loggingFile(c, fmt.Sprintf("Starting to copy file \"%v\" to \"%v\".", sourcePath, destination), "INFO", nil)
+
+	err = CopyFile(c, sourcePath, destination)
+	if err == nil {
+		loggingFilePlusConsole(c, fmt.Sprintf("Finished copying file \"arp\" to \"%s\".", destination), "INFO", err)
+		infoSys.Value = destination
+	} else {
+		loggingFilePlusConsole(c, "Failed to copy file \"arp\".", "ERROR", err)
+		infoSys.Value = fmt.Sprintf("Error: %v", err)
+	}
+	loggingFilePlusConsole(c, fmt.Sprintf("Finished retrieving \"arp table\" to \"%v\".", infoSys.Value), "INFO", nil)
+}
+
+// getDnsConfigs - копирует /etc/resolv.conf и /etc/hosts
+func getDnsConfigs(c *Collector, json_info []Info) []Info {
+	loggingFilePlusConsole(c, "Starting to retrieve DNS configs...", "INFO", nil)
+
+	path_directory := fmt.Sprintf("%v/networks/", c.MainDirectory)
+	err := makeDirectory(path_directory)
+	if err != nil && err != unix.EEXIST {
+		loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", path_directory), "ERROR", err)
+		return json_info
+	}
+
+	dnsFiles := []struct {
+		src  string
+		dest string
+	}{
+		{"/etc/resolv.conf", "resolv.conf"},
+		{"/etc/hosts", "hosts"},
+	}
+
+	for _, f := range dnsFiles {
+		infoSys := Info{}
+		infoSys.Title = f.src
+		infoSys.Time = getTimeUtc()
+
+		loggingFile(c, fmt.Sprintf("Starting to copy file \"%s\" to \"%s\".", f.src, path_directory+f.dest), "INFO", nil)
+		err = CopyFile(c, f.src, path_directory+f.dest)
+		if err == nil {
+			loggingFilePlusConsole(c, fmt.Sprintf("Finished copying file \"%s\" to \"%s\".", f.dest, path_directory+f.dest), "INFO", err)
+			infoSys.Value = path_directory + f.dest
+		} else {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to copy file \"%s\".", f.dest), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+		}
+		json_info = append(json_info, infoSys)
+	}
+
+	loggingFilePlusConsole(c, "Finished retrieving DNS configs.", "INFO", nil)
+	return json_info
+}
+
+// getNetworkConfigs - рекурсивно копирует содержимое /etc/ufw/, /etc/iptables/, /etc/ssh/
+func getNetworkConfigs(c *Collector, json_info []Info) []Info {
+	loggingFilePlusConsole(c, "Starting to retrieve network configs...", "INFO", nil)
+
+	networkDirs := []struct {
+		src  string
+		dest string
+	}{
+		{"/etc/ufw", "ufw"},
+		{"/etc/iptables", "iptables"},
+		{"/etc/ssh", "ssh"},
+	}
+
+	for _, d := range networkDirs {
+		infoSys := Info{}
+		infoSys.Title = d.src
+		infoSys.Time = getTimeUtc()
+
+		dest_directory := fmt.Sprintf("%v/networks/%s/", c.MainDirectory, d.dest)
+		err := makeDirectory(dest_directory)
+		if err != nil {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to create directory \"%v\".", dest_directory), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+			json_info = append(json_info, infoSys)
+			continue
+		}
+
+		loggingFile(c, fmt.Sprintf("Starting to copy directory \"%s\".", d.src), "INFO", nil)
+		err = copyDirectory(c, d.src, dest_directory)
+		if err != nil {
+			loggingFilePlusConsole(c, fmt.Sprintf("Failed to copy directory \"%s\".", d.src), "ERROR", err)
+			infoSys.Value = fmt.Sprintf("Error: %v", err)
+		} else {
+			loggingFile(c, fmt.Sprintf("Finished copying directory \"%s\".", d.src), "INFO", nil)
+			infoSys.Value = dest_directory
+		}
+		json_info = append(json_info, infoSys)
+	}
+
+	loggingFilePlusConsole(c, "Finished retrieving network configs.", "INFO", nil)
+	return json_info
+}
+

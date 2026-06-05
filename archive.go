@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // generateRandomPassword создаёт случайный 32-символьный пароль
@@ -28,8 +27,8 @@ func generateRandomPassword() string {
 
 // createEncryptedArchive создаёт зашифрованный архив напрямую на флешку
 func createEncryptedArchive(c *Collector, sourceDir, password string) error {
-	timestamp := time.Now().UTC().Format("2006-01-02_15-04-05")
-	archiveName := fmt.Sprintf("artifacts_%s.tar.gz.enc", timestamp)
+	baseName := filepath.Base(sourceDir)
+	archiveName := fmt.Sprintf("%s.tar.gz.enc", baseName)
 	parentDir := filepath.Dir(sourceDir)
 	encryptedPath := filepath.Join(parentDir, archiveName)
 
@@ -110,7 +109,8 @@ func createEncryptedTarGzDirect(outputPath, sourceDir, password string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create tar header: %w", err)
 		}
-		header.Name = relPath
+		baseName := filepath.Base(sourceDir)
+		header.Name = filepath.Join(baseName, relPath)
 
 		// Записываем заголовок
 		if err := tarWriter.WriteHeader(header); err != nil {
@@ -174,7 +174,7 @@ func finalizeArchive(c *Collector) {
 	// Генерация пароля для архива
 	password := generateRandomPassword()
 	loggingFilePlusConsole(c, fmt.Sprintf("\033[38;5;88mARCHIVE PASSWORD (SAVE IT): %s\033[0m", password), "INFO", nil)
-	
+
 	if err := createEncryptedArchive(c, c.MainDirectory, password); err != nil {
 		loggingFile(c, fmt.Sprintf("Archive creation failed: %v", err), "ERROR", nil)
 	} else {
