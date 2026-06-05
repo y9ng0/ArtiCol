@@ -43,7 +43,7 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 
 	// Создание лог файла
 	filename := fmt.Sprintf("%v/program.log", c.MainDirectory)
-	c.LogFile, err = unix.Open(filename, unix.O_CREAT|unix.O_WRONLY|unix.O_APPEND, 0777)
+	c.LogFile, err = unix.Open(filename, unix.O_CREAT|unix.O_WRONLY|unix.O_APPEND, 0700)
 	if err == nil {
 		loggingFilePlusConsole(c, "Log file created.", "INFO", nil)
 		defer unix.Close(c.LogFile)

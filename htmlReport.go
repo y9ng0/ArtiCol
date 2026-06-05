@@ -592,7 +592,7 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	htmlContent := buildHTMLTables(report, systemData, processesData, networksData, kernelData)
 
 	htmlPath := fmt.Sprintf("%s/report.html", c.MainDirectory)
-	fd, err := unix.Open(htmlPath, unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC, 0644)
+	fd, err := unix.Open(htmlPath, unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC, 0700)
 	if err != nil {
 		loggingFilePlusConsole(c, "Failed to create HTML report", "ERROR", err)
 		return err

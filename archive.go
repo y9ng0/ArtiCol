@@ -47,7 +47,7 @@ func createEncryptedArchive(c *Collector, sourceDir, password string) error {
 // createEncryptedTarGzDirect создаёт зашифрованный tar.gz архив напрямую
 func createEncryptedTarGzDirect(outputPath, sourceDir, password string) error {
 	// Создаём выходной файл на флешке
-	outFile, err := os.Create(outputPath)
+	outFile, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0700)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}

@@ -190,7 +190,11 @@ func copyFileConcurrent(c *Collector, srcPath, dstPath string) {
 // path - путь к директории
 // Возвращает ошибку или nil
 func makeDirectory(path string) error {
-	return unix.Mkdir(path, 0777)
+	err := unix.Mkdir(path, 0700)
+	if err == unix.EEXIST {
+		return nil
+	}
+	return err
 }
 
 // jsonCreate - создание JSON файла
@@ -200,7 +204,7 @@ func makeDirectory(path string) error {
 func jsonCreate(c *Collector, filename string) (int, error) {
 	filename = fmt.Sprintf("%v/%v.json", c.MainDirectory, filename)
 	loggingFile(c, fmt.Sprintf("Starting to create JSON file \"%v\".", filename), "INFO", nil)
-	file, err := unix.Open(filename, unix.O_CREAT|unix.O_WRONLY|unix.O_APPEND, 0777)
+	file, err := unix.Open(filename, unix.O_CREAT|unix.O_WRONLY|unix.O_APPEND, 0700)
 	if err == nil {
 		loggingFile(c, fmt.Sprintf("Finished creating JSON file \"%v\".", filename), "INFO", nil)
 		return file, nil
@@ -276,6 +280,19 @@ func copyOnce(source, destination string) error {
 	}
 	defer unix.Close(dfd)
 
-	_, err = unix.Sendfile(dfd, sfd, nil, int(st.Size))
-	return err
+	buf := make([]byte, 32768)
+	for {
+		n, err := unix.Read(sfd, buf)
+		if n == 0 {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		_, err = unix.Write(dfd, buf[:n])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
