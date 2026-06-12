@@ -4,7 +4,7 @@
 2. Рекомедуется запускать программу через `sudo`.
 
 # Быстрый старт
-1. Для полной статической компиляции использовать `go build -tags netgo -ldflags '-extldflags "-static"'`;
+1. Для полной статической компиляции использовать `CGO_ENABLED=0 go build`;
 2. Если уже есть бинарный файл, то просто запустите его через `sudo /path/to/ArtiCol`
 
 # Стек собираемых данных
@@ -28,7 +28,7 @@
 # Расшифровка архива
 Для расшифровки необходимо использовать отдельную утилиту `decrypt`:
 ```bash
-go build -tags decrypt -o decrypt decryptUtil/decrypt.go
+CGO_ENABLED=0 go build -o decrypt decryptUtil/decrypt.go
 ```
 Использование утилиты
 ``` bash
