@@ -17,10 +17,9 @@ func getTimeUtc() string {
 
 // initialization - инициализация работы (создание рабочего пространства и запуск горутин)
 // c - коллектор
-// flag - флаг запуска (true - root, false - user)
 // start - время начала сбора
 // Возвращает ошибку или nil
-func initialization(c *Collector, flag bool, start time.Time) error {
+func initialization(c *Collector, start time.Time) error {
 	loggingConsole("Starting to retrieve artifacts.", "INFO", nil)
 	c.UserName = getUserProcessName()
 
@@ -61,7 +60,7 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 	json_info := []Info{}
 
 	// Начало обхода системы на сбор артефактов
-	json_info = mainArtifacts(c, json_info, flag)
+	json_info = mainArtifacts(c, json_info)
 
 	// Завершение процесса сбора информации и запись данных в json
 	loggingJson(c, &json_info, "INFO", true, c.JsonFile)
@@ -73,17 +72,6 @@ func initialization(c *Collector, flag bool, start time.Time) error {
 	result := fmt.Sprintf("Finished retrieving artifacts. The program ran in %v.", elapsed)
 	loggingFilePlusConsole(c, result, "DONE", nil)
 	return nil
-}
-
-// getProcessId - проверка наличия root-прав процесса
-// Возвращает true если есть root-права, иначе false
-func getProcessId() bool {
-	user_id := unix.Getuid()
-	if user_id == 0 {
-		return true
-	} else {
-		return false
-	}
 }
 
 // getUserProcessName - получение имени пользователя процесса
@@ -128,9 +116,5 @@ func getUserProcessName() string {
 func main() {
 	start := time.Now()
 	c := &Collector{}
-	if getProcessId() {
-		initialization(c, true, start)
-	} else {
-		initialization(c, false, start)
-	}
+	initialization(c, start)
 }

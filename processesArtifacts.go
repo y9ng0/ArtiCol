@@ -12,20 +12,18 @@ import (
 // processWorker - воркер для параллельного сбора информации о процессах
 // c - коллектор
 // pids - срез идентификаторов процессов
-// flag - флаг запуска (true - root, false - user)
 // wg - группа ожидания
 // resultsChan - канал для результатов
-func processWorker(c *Collector, pids []int32, flag bool, wg *sync.WaitGroup, resultsChan chan<- []processesId) {
+func processWorker(c *Collector, pids []int32, wg *sync.WaitGroup, resultsChan chan<- []processesId) {
 	defer wg.Done()
-	result := getInfoPid(c, pids, flag)
+	result := getInfoPid(c, pids)
 	resultsChan <- result
 }
 
 // getPids - сбор информации о процессах
 // c - коллектор
 // info - информация об объекте
-// flag - флаг запуска (true - root, false - user)
-func getPids(c *Collector, info *Info, flag bool) error {
+func getPids(c *Collector, info *Info) error {
 	loggingFilePlusConsole(c, "Starting to retrieve \"processes\".", "INFO", nil)
 
 	filename := "processes"
@@ -74,7 +72,7 @@ func getPids(c *Collector, info *Info, flag bool) error {
 			break
 		}
 		wg.Add(1)
-		go processWorker(c, pids[start:end], flag, &wg, resultsChan)
+		go processWorker(c, pids[start:end], &wg, resultsChan)
 	}
 
 	wg.Wait()
@@ -100,8 +98,7 @@ func getPids(c *Collector, info *Info, flag bool) error {
 // getInfoPid - сбор детальной информации о конкретных процессах
 // c - коллектор
 // pids - срез идентификаторов процессов
-// flag - флаг запуска (true - root, false - user)
-func getInfoPid(c *Collector, pids []int32, flag bool) []processesId {
+func getInfoPid(c *Collector, pids []int32) []processesId {
 	var partAllProcesses []processesId
 	for _, pid := range pids {
 		strct := processesId{}
@@ -151,20 +148,18 @@ func getInfoPid(c *Collector, pids []int32, flag bool) []processesId {
 				strct.Uids = fmt.Sprintf("Unknown. Error: %v", err)
 			}
 
-			if flag || unix.Getuid() == int(uids[1]) {
-				path, err := p.Exe()
-				if err == nil {
-					strct.Location = path
-				} else {
-					strct.Location = fmt.Sprintf("Unknown. Error: %v", err)
-				}
+			path, err := p.Exe()
+			if err == nil {
+				strct.Location = path
+			} else {
+				strct.Location = fmt.Sprintf("Unknown. Error: %v", err)
+			}
 
-				files, err := p.OpenFiles()
-				if err == nil {
-					strct.FileDescriptor = files
-				} else {
-					strct.FileDescriptor = fmt.Sprintf("Unknown. Error: %v", err)
-				}
+			files, err := p.OpenFiles()
+			if err == nil {
+				strct.FileDescriptor = files
+			} else {
+				strct.FileDescriptor = fmt.Sprintf("Unknown. Error: %v", err)
 			}
 		} else {
 			loggingFile(c, fmt.Sprintf("Failed to retrieve process \"%v\".", pid), "WARNING", err)

@@ -57,7 +57,7 @@ func getInfo(c *Collector, strct *sysInfo, typeInfo string) {
 		case "Kernel":
 			strct.Value = info.KernelVersion + " " + info.KernelArch
 		case "OS":
-			strct.Value = fmt.Sprintf("%v (%v)", info.PlatformFamily, info.PlatformVersion)
+			strct.Value = fmt.Sprintf("%v (%v)", info.Platform, info.PlatformVersion)
 		}
 		loggingFile(c, fmt.Sprintf("Finished retrieving \"%v\".", typeInfo), "INFO", nil)
 	}

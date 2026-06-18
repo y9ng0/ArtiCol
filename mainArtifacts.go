@@ -1,11 +1,11 @@
 // mainArtifacts.go - обновленная версия
 package main
 
-func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
+func mainArtifacts(c *Collector, json_info []Info) []Info {
 
 	// Информация о процессах (PIDs, дескрипторы, память процессов)
 	infoSys := Info{}
-	getPids(c, &infoSys, flag)
+	getPids(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	// Информация о TCP/UDP(V4/v6) соединениях
@@ -58,7 +58,7 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Копирование bash_history и zsh_history
 	infoSys = Info{}
-	getHomeDir(c, &infoSys, flag)
+	getHomeDir(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	// Копирование файла passwd
@@ -68,7 +68,7 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Копирование файла shadow
 	infoSys = Info{}
-	getShadow(c, &infoSys, flag)
+	getShadow(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	// Копирование файла group
@@ -78,12 +78,12 @@ func mainArtifacts(c *Collector, json_info []Info, flag bool) []Info {
 
 	// Копирование файла sudoers
 	infoSys = Info{}
-	getSudoers(c, &infoSys, flag)
+	getSudoers(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	// Копирование /etc/sudoers.d/
 	infoSys = Info{}
-	getSudoersD(c, &infoSys, flag)
+	getSudoersD(c, &infoSys)
 	json_info = append(json_info, infoSys)
 
 	// Генерация HTML отчета

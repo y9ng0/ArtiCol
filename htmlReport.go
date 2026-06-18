@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,16 +16,10 @@ type Anomaly struct {
 	Timestamp string
 }
 
-type TimelineEvent struct {
-	Timestamp string
-	Event     string
-}
-
 type HTMLReport struct {
 	Hostname  string
 	StartTime time.Time
 	Anomalies []Anomaly
-	Timeline  []TimelineEvent
 }
 
 var systemProcessesWhitelist = map[string]bool{
@@ -34,6 +27,8 @@ var systemProcessesWhitelist = map[string]bool{
 	"zsh": true, "ps": true, "grep": true, "awk": true, "sed": true,
 	"init": true, "kthreadd": true, "rcu_gp": true, "ksoftirqd": true,
 	"migration": true, "watchdog": true, "kswapd0": true, "kdevtmpfs": true,
+	"articol": true, "go": true, "dlv": true, "dbus": true, "udevd": true,
+	"journald": true, "logind": true, "networkd": true, "resolved": true,
 }
 
 var trustedExternalNetworks = []struct {
@@ -119,6 +114,12 @@ func isPrivateIP(ip string) bool {
 	if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "169.254.") {
 		return true
 	}
+	if strings.HasPrefix(ip, "224.") || strings.HasPrefix(ip, "239.") {
+		return true
+	}
+	if ip == "::1" || strings.HasPrefix(ip, "fe80:") || strings.HasPrefix(ip, "ff02") {
+		return true
+	}
 	return false
 }
 
@@ -135,7 +136,7 @@ func analyzeProcesses(processes []processesId) []Anomaly {
 
 		skip := false
 		for sysProc := range systemProcessesWhitelist {
-			if strings.HasPrefix(nameLower, sysProc) || nameLower == sysProc {
+			if strings.HasPrefix(nameLower, sysProc) || strings.Contains(nameLower, sysProc) {
 				skip = true
 				break
 			}
@@ -267,7 +268,7 @@ func analyzeDeletedBashHistory(c *Collector) []Anomaly {
 
 	skipItems := map[string]bool{
 		"passwd": true, "shadow": true, "sessions": true,
-		".": true, "..": true,
+		".": true, "..": true, "sudoers.d": true, "sudoers": true, "group": true,
 	}
 
 	buf := make([]byte, 8192)
@@ -529,26 +530,6 @@ func readSmallFile(path string) (string, error) {
 	return string(buf[:n]), nil
 }
 
-func buildTimeline(anomalies []Anomaly, processes []processesId, connections []networks) []TimelineEvent {
-	var timeline []TimelineEvent
-	now := getTimeUtc()
-	timeline = append(timeline, TimelineEvent{Timestamp: now, Event: "Запуск сбора"})
-
-	seen := make(map[string]bool)
-	for _, a := range anomalies {
-		key := a.Title + a.Message
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		timeline = append(timeline, TimelineEvent{Timestamp: a.Timestamp, Event: a.Title + ": " + a.Message})
-	}
-
-	timeline = append(timeline, TimelineEvent{Timestamp: now, Event: fmt.Sprintf("Процессов: %d, Соединений: %d", len(processes), len(connections))})
-	sort.Slice(timeline, func(i, j int) bool { return timeline[i].Timestamp > timeline[j].Timestamp })
-	return timeline
-}
-
 func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 	startTime := time.Now().UTC()
 	loggingFilePlusConsole(c, "Generating HTML report...", "INFO", nil)
@@ -557,7 +538,6 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 		Hostname:  getHostname(),
 		StartTime: startTime,
 		Anomalies: []Anomaly{},
-		Timeline:  []TimelineEvent{},
 	}
 
 	processesPath := fmt.Sprintf("%s/processes.json", c.MainDirectory)
@@ -586,8 +566,6 @@ func generateHTMLReport(c *Collector, jsonInfo []Info) error {
 
 	systemData, _ := readJSONFile(fmt.Sprintf("%s/system_info.json", c.MainDirectory))
 	kernelData, _ := readJSONFile(fmt.Sprintf("%s/kernel_modules.json", c.MainDirectory))
-
-	report.Timeline = buildTimeline(report.Anomalies, processes, connections)
 
 	htmlContent := buildHTMLTables(report, systemData, processesData, networksData, kernelData)
 
@@ -643,7 +621,6 @@ func readJSONFile(path string) (interface{}, error) {
 	return result, nil
 }
 
-// formatSystemTable - системная информация в таблицу
 func formatSystemTable(data interface{}) string {
 	sysSlice, ok := data.([]interface{})
 	if !ok {
@@ -677,8 +654,6 @@ func formatSystemTable(data interface{}) string {
 	return rows
 }
 
-// formatKernelTable - модули ядра в таблицу
-// formatKernelTable - модули ядра в таблицу
 func formatKernelTable(data interface{}) string {
 	modules, ok := data.([]interface{})
 	if !ok || len(modules) == 0 {
@@ -704,7 +679,7 @@ func formatKernelTable(data interface{}) string {
 	}
 	return rows
 }
-// formatProcessesTable - процессы в таблицу
+
 func formatProcessesTable(data interface{}) string {
 	processes, ok := data.([]interface{})
 	if !ok || len(processes) == 0 {
@@ -717,7 +692,6 @@ func formatProcessesTable(data interface{}) string {
 		if !ok {
 			continue
 		}
-		// Пропускаем пустые записи
 		if procMap["pid"] == nil && procMap["title"] == nil {
 			continue
 		}
@@ -734,7 +708,6 @@ func formatProcessesTable(data interface{}) string {
 	return rows
 }
 
-// formatNetworkTable - сетевые соединения в таблицу
 func formatNetworkTable(data interface{}) string {
 	connections, ok := data.([]interface{})
 	if !ok || len(connections) == 0 {
@@ -787,18 +760,7 @@ func buildHTMLTables(report HTMLReport, systemData, processesData, networksData,
 		anomaliesHTML = "<div>-</div>"
 	}
 
-	var timelineHTML string
-	for _, t := range report.Timeline {
-		event := t.Event
-		ts := t.Timestamp
-		if len(ts) > 19 {
-			ts = ts[:19]
-		}
-		timelineHTML += fmt.Sprintf("<div class=\"timeline-item\">• %s: %s</div>", ts, event)
-	}
-	if timelineHTML == "" {
-		timelineHTML = "<div>-</div>"
-	}
+
 
 	systemTable := formatSystemTable(systemData)
 	kernelTable := formatKernelTable(kernelData)
@@ -901,16 +863,13 @@ func buildHTMLTables(report HTMLReport, systemData, processesData, networksData,
             width: 200px;
             color: #a0a0a0;
         }
-        .anomaly-item, .timeline-item {
+        .anomaly-item {
             padding: 6px 0;
             font-family: monospace;
             font-size: 12px;
             border-left: 3px solid #ffaa44;
             padding-left: 10px;
             margin: 5px 0;
-        }
-        .timeline-item {
-            border-left-color: #4facfe;
         }
         .collapsed-indicator {
             float: right;
@@ -938,13 +897,7 @@ func buildHTMLTables(report HTMLReport, systemData, processesData, networksData,
     <div class="section-content">%s</div>
 </div>
 
-<div class="section">
-    <div class="section-title" onclick="toggleSection(this)">
-        Таймлайн
-        <span class="collapsed-indicator">▼</span>
-    </div>
-    <div class="section-content">%s</div>
-</div>
+
 
 <div class="section">
     <div class="section-title" onclick="toggleSection(this)">
@@ -1043,7 +996,6 @@ function toggleSection(title) {
 		hostname, startTime,
 		len(uniqueAnomalies),
 		anomaliesHTML,
-		timelineHTML,
 		systemTable,
 		processesTable,
 		networkTable,
